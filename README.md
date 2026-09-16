@@ -22,7 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.16-edge-voice-switch-20260916`
+> Current build: `2.3.17-edge-expression-20260916`
 
 ## Features
 
@@ -85,7 +85,9 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
 - Full Edge voice catalog discovery with friendly name, locale, and gender.
 - Provider-aware controls that swap between Browser, Edge, Piper, and Off.
 - Voice preview, stop/cancel, auto-speak, and per-response **SPEAK**.
-- Configurable rate, pitch, maximum spoken characters, and Edge failure fallback.
+- Configurable rate, pitch, volume, maximum spoken characters, and Edge failure fallback.
+- Edge expression presets: Neutral, Calm, Friendly, Cheerful, Serious, Sad, Angry, Dramatic, Narrator, and local deterministic Auto tone.
+- Adjustable tone intensity plus Off / Natural / Expressive pause styles with bounded `[pause:NNN]` markers and real client-side playback gaps.
 - Optional skipping of URLs and code blocks.
 - Bounded synthesis queue and sanitization before online Edge synthesis.
 
@@ -158,7 +160,7 @@ CypraStudio targets Windows and expects:
 - Python 3.11–3.14, **or** the optional bundled `Setup/\u200bPython312` runtime.
 - Sufficient RAM/VRAM for the model you choose.
 
-The launcher creates and manages a project-local `.venv`. Core Python dependencies are installed from bundled/offline setup resources when available, otherwise from the configured online Python package source. Edge TTS support is only prepared when that optional provider is enabled.
+The launcher creates and manages a project-local `.venv`. Core Python dependencies are installed from bundled/offline setup resources when available, otherwise from the configured online Python package source. Edge TTS support remains optional; when Edge is enabled with its privacy gate open, CypraStudio can prepare the pinned `edge-tts` dependency in the running project environment and then load the Microsoft voice catalog without requiring a Studio restart.
 
 ## Launch
 
@@ -210,7 +212,7 @@ CypraStudio is local-first, not universally offline. Normal Ollama chat, local r
 
 - installing Python dependencies when no compatible offline package source is available;
 - downloading a public GGUF model from Hugging Face;
-- enabling Microsoft Edge neural TTS and synthesizing speech.
+- enabling Microsoft Edge neural TTS, preparing its optional Python dependency when absent, loading the voice catalog, and synthesizing speech.
 
 Edge TTS has its own explicit privacy gate. Do not enable it for text you do not want sent to Microsoft’s speech service.
 

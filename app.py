@@ -18,7 +18,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 LOG = DATA / "launch.log"
 READY = DATA / "studio.ready"
 APP_RUNTIME = DATA / "app.runtime.json"
-BUILD_ID = "2.3.16-edge-voice-switch-20260916"
+BUILD_ID = "2.3.17-edge-expression-20260916"
 APP_ID = "matrixstudio2-local"
 os.chdir(ROOT)
 sys.dont_write_bytecode = True

@@ -284,8 +284,12 @@
               <div class="field" id="tts-edge-voice-field" hidden><span>Edge voice</span><select id="set-tts-edge-voice"><option value="en-US-AvaNeural">Ava · en-US · Neural</option></select><small id="edge-voice-status">Enable online Edge TTS to load the full Microsoft voice catalog.</small><button class="btn ghost small" id="refresh-edge-voices" type="button">REFRESH VOICES</button></div>
               <label class="field" id="tts-local-voice-field" hidden><span>Local Piper voice</span><input id="set-tts-local-voice" autocomplete="off" value="en_US-lessac-medium"><small>Uses project-local Piper voice assets when installed.</small></label>
               <label class="field" id="tts-edge-fallback-field" hidden><span>Edge failure fallback</span><select id="set-tts-fallback"><option value="browser">Device / browser voice</option><option value="piper">Piper local voice</option><option value="none">No fallback</option></select></label>
+              <label class="field" id="tts-edge-tone-field" hidden><span>Edge tone</span><select id="set-tts-tone"><option value="neutral">Neutral</option><option value="calm">Calm</option><option value="friendly">Friendly</option><option value="cheerful">Cheerful</option><option value="serious">Serious</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="dramatic">Dramatic</option><option value="narrator">Narrator</option><option value="auto">Auto tone</option></select><small>Presets shape Edge rate, pitch and volume without unsupported SSML.</small></label>
+              <label class="field" id="tts-edge-intensity-field" hidden><span>Tone intensity <output id="tts-intensity-output">70%</output></span><input id="set-tts-intensity" type="range" min="0" max="1" step="0.05"><small>Controls how strongly the selected Edge tone modifies your manual speech settings.</small></label>
+              <label class="field" id="tts-edge-pause-field" hidden><span>Pause style</span><select id="set-tts-pause-style"><option value="off">Off</option><option value="natural">Natural</option><option value="expressive">Expressive</option></select><small>Natural and Expressive insert real playback gaps. Manual markers such as [pause:700] are capped at 2000 ms.</small></label>
               <label class="field"><span>Speech rate <output id="tts-rate-output">1.00</output></span><input id="set-tts-rate" type="range" min="0.5" max="2" step="0.05"></label>
-              <label class="field"><span>Speech pitch <output id="tts-pitch-output">1.00</output></span><input id="set-tts-pitch" type="range" min="0.5" max="2" step="0.05"><small>Applied by device/browser speech; server engines may use their native voice characteristics.</small></label>
+              <label class="field"><span>Speech pitch <output id="tts-pitch-output">1.00</output></span><input id="set-tts-pitch" type="range" min="0.5" max="2" step="0.05"><small>Applied directly to device speech and used as a bounded Edge prosody modifier.</small></label>
+              <label class="field"><span>Speech volume <output id="tts-volume-output">1.00</output></span><input id="set-tts-volume" type="range" min="0.5" max="1.5" step="0.05"><small>Edge maps this to bounded volume prosody. Device speech uses values up to its native maximum.</small></label>
               <label class="field"><span>Maximum spoken characters</span><input id="set-tts-max-chars" type="number" min="100" max="10000" step="100"><small>Long replies are clipped at a sensible sentence boundary.</small></label>
               <label class="field"><span>Piper CPU threads</span><input id="set-tts-cpu-threads" type="number" min="1" max="4" step="1"><small>Piper stays CPU-only so it does not compete with the local model for VRAM.</small></label>
             </div>
@@ -425,6 +429,6 @@
 
   <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
 
-  <script src="/static/js/app.js?v=edge-voices-2316"></script>
+  <script src="/static/js/app.js?v=edge-expression-2317"></script>
 </body>
 </html>

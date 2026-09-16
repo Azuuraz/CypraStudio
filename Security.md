@@ -6,6 +6,14 @@ CypraStudio is a local-first desktop application that combines a native WebView2
 
 Security fixes are maintained against the current CypraStudio release line. When reporting an issue, reproduce it on the newest available build when practical.
 
+Current documented build:
+
+```text
+2.3.17-edge-expression-20260916
+```
+
+Older builds may contain issues already addressed by later runtime, persistence, TTS, or request-boundary hardening.
+
 ## Security model
 
 CypraStudio currently uses the following protections:
@@ -24,6 +32,7 @@ CypraStudio currently uses the following protections:
 - Hugging Face imports accept GGUF model data only. Repository scripts and arbitrary code are not executed as part of the import path.
 - Hugging Face downloads are size-bounded, commit-pinned, space-checked, and SHA-256 verified before registration.
 - Edge neural TTS is disabled unless the user explicitly enables online Edge TTS.
+- If the optional `edge-tts` dependency is missing, runtime preparation is exposed only through a same-origin POST action after that privacy gate is open; voice-catalog GET requests do not install packages.
 - Text is sanitized before optional Edge speech synthesis. Credential-shaped material, internal prompt/context markers, private paths, and configured code/URL content are excluded from online speech requests.
 - Piper TTS is designed to run locally and CPU-only so voice output does not compete with the configured local model for GPU VRAM.
 - Persistent JSON state uses atomic-write behavior and keeps a last-known-good settings recovery copy.
@@ -36,7 +45,7 @@ Normal local chat is intended to use the private loopback Ollama runtime. CypraS
 
 - online Python dependency installation when offline setup resources are unavailable;
 - public Hugging Face repository inspection or GGUF downloads;
-- Microsoft Edge neural TTS after its online privacy gate has been enabled.
+- Microsoft Edge neural TTS after its online privacy gate has been enabled, including optional `edge-tts` dependency preparation when the project environment does not already contain it.
 
 Browser/device speech and local Piper speech do not require Edge TTS.
 

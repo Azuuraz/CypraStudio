@@ -2,7 +2,7 @@
 $Root = $PSScriptRoot
 Set-Location -LiteralPath $Root
 
-$BuildId = "2.3.16-edge-voice-switch-20260916"
+$BuildId = "2.3.17-edge-expression-20260916"
 $AppId = "matrixstudio2-local"
 $BootCols = 76
 $BootRows = 18

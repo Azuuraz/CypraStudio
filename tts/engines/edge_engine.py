@@ -29,7 +29,9 @@ class EdgeEngine:
         text: str,
         *,
         voice: str,
-        speed: float,
+        rate: str = "+0%",
+        pitch: str = "+0Hz",
+        volume: str = "+0%",
         cancelled: Callable[[], bool],
         timeout: float = 30.0,
     ) -> bytes:
@@ -38,7 +40,7 @@ class EdgeEngine:
         except ImportError as exc:
             raise EdgeUnavailable("edge-tts is not installed") from exc
 
-        communicator = edge_tts.Communicate(text, voice, rate=self.rate_for_speed(speed))
+        communicator = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume)
         output = io.BytesIO()
         try:
             async with asyncio.timeout(timeout):

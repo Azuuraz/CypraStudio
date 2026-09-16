@@ -161,8 +161,10 @@
       if (!clean) { resolve(); return; }
       if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') { reject(new Error('Device speech synthesis is unavailable')); return; }
       const utter = new SpeechSynthesisUtterance(clean);
-      utter.rate = clamp(Number(state.settings.tts_rate) || 1, .5, 2);
-      utter.pitch = clamp(Number(state.settings.tts_pitch) || 1, .5, 2);
+      const expression = currentTTSExpressionSettings();
+      utter.rate = expression.rate;
+      utter.pitch = expression.pitch;
+      utter.volume = clamp(expression.volume, 0, 1);
       try {
         const voices = speechSynthesis.getVoices() || [];
         const preferred = voices.find(v => /en(-|_)US/i.test(v.lang) && /natural|neural|premium/i.test(v.name)) || voices.find(v => /^en/i.test(v.lang)) || voices[0];
@@ -177,46 +179,129 @@
     });
   }
 
+  function currentTTSExpressionSettings() {
+    const rate = Number($('#set-tts-rate')?.value ?? state.settings.tts_rate ?? 1);
+    const pitch = Number($('#set-tts-pitch')?.value ?? state.settings.tts_pitch ?? 1);
+    const volume = Number($('#set-tts-volume')?.value ?? state.settings.tts_volume ?? 1);
+    const intensity = Number($('#set-tts-intensity')?.value ?? state.settings.tts_intensity ?? .7);
+    return {
+      rate: clamp(Number.isFinite(rate) ? rate : 1, .5, 2),
+      pitch: clamp(Number.isFinite(pitch) ? pitch : 1, .5, 2),
+      volume: clamp(Number.isFinite(volume) ? volume : 1, .5, 1.5),
+      tone: String($('#set-tts-tone')?.value || state.settings.tts_tone || 'neutral'),
+      intensity: clamp(Number.isFinite(intensity) ? intensity : .7, 0, 1),
+      pause_style: String($('#set-tts-pause-style')?.value || state.settings.tts_pause_style || 'natural')
+    };
+  }
+
+  function waitSpeechPause(ms, token) {
+    const delay = clamp(Number(ms) || 0, 0, 2000);
+    if (!delay || token !== state.ttsToken) return Promise.resolve();
+    return new Promise(resolve => {
+      const deadline = performance.now() + delay;
+      const tick = () => {
+        if (token !== state.ttsToken || performance.now() >= deadline) { resolve(); return; }
+        setTimeout(tick, Math.min(50, Math.max(10, deadline - performance.now())));
+      };
+      tick();
+    });
+  }
+
+  async function playVoiceResponse(response, token, providerLabel) {
+    const blob = await response.blob();
+    if (token !== state.ttsToken) return false;
+    if (state.ttsAudioUrl) { try { URL.revokeObjectURL(state.ttsAudioUrl); } catch {} state.ttsAudioUrl = ''; }
+    const url = URL.createObjectURL(blob); state.ttsAudioUrl = url;
+    const audio = new Audio(url); state.ttsAudio = audio; state.ttsPlaying = true;
+    if ($('#tts-status')) $('#tts-status').textContent = `Speaking with ${providerLabel}…`;
+    await new Promise((resolve, reject) => {
+      audio.onended = () => resolve();
+      audio.onerror = () => reject(new Error('Voice audio playback failed'));
+      audio.play().catch(reject);
+    });
+    if (state.ttsAudio === audio) state.ttsAudio = null;
+    if (state.ttsAudioUrl === url) { URL.revokeObjectURL(url); state.ttsAudioUrl = ''; }
+    return token === state.ttsToken;
+  }
+
+  async function requestServerSpeech(text, {configured, voiceId, expression, token, preview=false}) {
+    state.ttsAbort = new AbortController();
+    const response = await fetch('/api/tts', {
+      method:'POST', headers:{'Content-Type':'application/json'}, signal:state.ttsAbort.signal,
+      body:JSON.stringify({
+        text, voice_id:voiceId, provider:configured, replace:false, preview:!!preview,
+        rate:expression.rate, pitch:expression.pitch, volume:expression.volume,
+        tone:expression.tone, intensity:expression.intensity
+      })
+    });
+    state.ttsAbort = null;
+    if (!response.ok) {
+      let payload = {}; try { payload = await response.json(); } catch {}
+      const detail = payload?.detail;
+      if (detail?.error === 'browser_tts') return {browserFallback:true};
+      const message = typeof detail === 'string' ? detail : (detail?.message || `Voice synthesis failed (${response.status})`);
+      throw new Error(message);
+    }
+    const played = await playVoiceResponse(response, token, configured === 'edge' ? 'Edge' : 'Piper');
+    return {played};
+  }
+
   async function speakText(text, {preview=false, provider=null, button=null} = {}) {
     const configured = String(provider || state.settings.tts_provider || 'browser').toLowerCase();
     if (!preview && !state.settings.voice_output_enabled) throw new Error('Voice Output is disabled');
     if (configured === 'off') throw new Error('Voice provider is Off');
     const clean = sanitizeBrowserSpeech(text);
     if (!clean) return;
-    if (state.settings.tts_stop_previous !== false) stopSpeech({notifyBackend:true});
+
+    if (state.settings.tts_stop_previous !== false) {
+      stopSpeech({notifyBackend:false});
+      if (configured !== 'browser') {
+        try { await fetch('/api/tts/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({release:false})}); } catch {}
+      }
+    }
     const token = ++state.ttsToken;
     const originalLabel = button?.textContent || '';
     if (button) { button.disabled = true; button.textContent = 'VOICE…'; }
     try {
       if (configured === 'browser') { await speakBrowser(clean, token); return; }
-      state.ttsAbort = new AbortController();
-      if ($('#tts-status')) $('#tts-status').textContent = configured === 'edge' ? 'Preparing sanitized Edge speech…' : 'Preparing local Piper speech…';
-      const voiceId = configured === 'edge' ? (state.settings.tts_edge_voice || 'en-US-AvaNeural') : (state.settings.tts_local_voice || 'en_US-lessac-medium');
-      const response = await fetch('/api/tts', {
-        method:'POST', headers:{'Content-Type':'application/json'}, signal:state.ttsAbort.signal,
-        body:JSON.stringify({text:clean, voice_id:voiceId, provider:configured, replace:true, preview:!!preview})
-      });
-      state.ttsAbort = null;
-      if (!response.ok) {
-        let payload = {}; try { payload = await response.json(); } catch {}
-        const detail = payload?.detail;
-        if (detail?.error === 'browser_tts') { await speakBrowser(clean, token); return; }
-        const message = typeof detail === 'string' ? detail : (detail?.message || `Voice synthesis failed (${response.status})`);
-        throw new Error(message);
+      const expression = currentTTSExpressionSettings();
+      const voiceId = configured === 'edge' ? (state.settings.tts_edge_voice || $('#set-tts-edge-voice')?.value || 'en-US-AvaNeural') : (state.settings.tts_local_voice || 'en_US-lessac-medium');
+
+      if (configured === 'edge') {
+        if ($('#tts-status')) $('#tts-status').textContent = 'Planning expressive Edge speech…';
+        state.ttsAbort = new AbortController();
+        const planResponse = await fetch('/api/tts/plan', {
+          method:'POST', headers:{'Content-Type':'application/json'}, signal:state.ttsAbort.signal,
+          body:JSON.stringify({text:String(text || ''), tone:expression.tone, intensity:expression.intensity, pause_style:expression.pause_style})
+        });
+        state.ttsAbort = null;
+        if (!planResponse.ok) {
+          let payload = {}; try { payload = await planResponse.json(); } catch {}
+          const detail = payload?.detail;
+          throw new Error(typeof detail === 'string' ? detail : (detail?.message || `Edge speech planning failed (${planResponse.status})`));
+        }
+        const plan = await planResponse.json();
+        if (!Array.isArray(plan?.segments) || !plan.segments.length) throw new Error('Edge speech plan returned no speakable segments');
+        expression.tone = String(plan.tone || expression.tone);
+        expression.intensity = clamp(Number(plan.intensity ?? expression.intensity), 0, 1);
+        if ($('#tts-status')) $('#tts-status').textContent = `Edge · ${expression.tone.toUpperCase()} · ${plan.segments.length} segment${plan.segments.length === 1 ? '' : 's'}`;
+        for (const segment of plan.segments) {
+          if (token !== state.ttsToken) return;
+          const segmentText = String(segment?.text || '').trim();
+          if (!segmentText) continue;
+          const result = await requestServerSpeech(segmentText, {configured:'edge', voiceId, expression, token, preview});
+          if (result?.browserFallback) await speakBrowser(segmentText, token);
+          if (token !== state.ttsToken) return;
+          await waitSpeechPause(segment.pause_after_ms, token);
+        }
+      } else {
+        if ($('#tts-status')) $('#tts-status').textContent = 'Preparing local Piper speech…';
+        const result = await requestServerSpeech(clean, {configured, voiceId, expression, token, preview});
+        if (result?.browserFallback) await speakBrowser(clean, token);
       }
-      const blob = await response.blob();
-      if (token !== state.ttsToken) return;
-      const url = URL.createObjectURL(blob); state.ttsAudioUrl = url;
-      const audio = new Audio(url); state.ttsAudio = audio; state.ttsPlaying = true;
-      if ($('#tts-status')) $('#tts-status').textContent = `Speaking with ${configured === 'edge' ? 'Edge' : 'Piper'}…`;
-      await new Promise((resolve, reject) => {
-        audio.onended = () => resolve();
-        audio.onerror = () => reject(new Error('Voice audio playback failed'));
-        audio.play().catch(reject);
-      });
+
       if (token === state.ttsToken) {
-        state.ttsPlaying = false; state.ttsAudio = null;
-        if (state.ttsAudioUrl) { URL.revokeObjectURL(state.ttsAudioUrl); state.ttsAudioUrl = ''; }
+        state.ttsPlaying = false;
         if ($('#tts-status')) $('#tts-status').textContent = 'Voice ready';
       }
     } catch (error) {
@@ -236,7 +321,7 @@
       const status = await api('/api/tts/status');
       if (!status.voice_output_enabled) el.textContent = 'Voice output is off';
       else if (status.configured === 'edge' && !status.allow_online) el.textContent = 'Edge blocked by privacy gate · browser fallback available';
-      else if (status.configured === 'edge' && status.allow_online && !status.local?.edge_dependency) el.textContent = 'Edge package not prepared · restart Studio once, then reopen Voice settings';
+      else if (status.configured === 'edge' && status.allow_online && !status.local?.edge_dependency) el.textContent = 'Edge support will self-prepare when voices or speech are requested';
       else if (status.configured === 'local' && !(status.local?.ready && status.local?.dependency)) el.textContent = 'Piper unavailable · install local voice assets/dependency or use browser';
       else el.textContent = `${String(status.configured || 'browser').toUpperCase()} voice ready`;
     } catch { el.textContent = 'Voice status unavailable'; }
@@ -262,6 +347,7 @@
     if ($('#tts-edge-voice-field')) $('#tts-edge-voice-field').hidden = provider !== 'edge';
     if ($('#tts-local-voice-field')) $('#tts-local-voice-field').hidden = provider !== 'local';
     if ($('#tts-edge-fallback-field')) $('#tts-edge-fallback-field').hidden = provider !== 'edge';
+    for (const id of ['tts-edge-tone-field','tts-edge-intensity-field','tts-edge-pause-field']) { const el = $('#'+id); if (el) el.hidden = provider !== 'edge'; }
     const edgeSelect = $('#set-tts-edge-voice');
     const refresh = $('#refresh-edge-voices');
     if (edgeSelect) edgeSelect.disabled = provider !== 'edge' || !online || state.edgeVoicesLoading;
@@ -288,7 +374,7 @@
 
     state.edgeVoicesLoading = true;
     syncTTSProviderUI();
-    if (status) status.textContent = 'Loading Edge voices…';
+    if (status) status.textContent = 'Preparing Edge support and loading voices…';
     try {
       // Persist the privacy gate before the backend is allowed to make the
       // Microsoft voice-catalog request. This avoids the old autosave race.
@@ -297,6 +383,7 @@
         body:JSON.stringify({tts_provider:'edge', tts_allow_online:true})
       });
       if (saved?.settings) state.settings = {...state.settings, ...saved.settings};
+      await api('/api/tts/edge/prepare', {method:'POST'});
       const result = await api('/api/tts/voices/edge' + (force ? '?refresh=1' : ''));
       const voices = Array.isArray(result?.voices) ? result.voices : [];
       if (!voices.length) throw new Error('No Edge voices were returned');
@@ -1631,6 +1718,7 @@
     $('#set-voice-output').checked = !!s.voice_output_enabled; $('#set-tts-provider').value = s.tts_provider || 'browser'; $('#set-tts-auto-speak').checked = !!s.tts_auto_speak; $('#set-tts-allow-online').checked = !!s.tts_allow_online;
     primeEdgeVoiceSelection(s.tts_edge_voice || 'en-US-AvaNeural'); $('#set-tts-local-voice').value = s.tts_local_voice || 'en_US-lessac-medium'; $('#set-tts-fallback').value = s.tts_online_fallback || 'browser';
     $('#set-tts-rate').value = s.tts_rate ?? 1; $('#tts-rate-output').value = Number(s.tts_rate ?? 1).toFixed(2); $('#set-tts-pitch').value = s.tts_pitch ?? 1; $('#tts-pitch-output').value = Number(s.tts_pitch ?? 1).toFixed(2);
+    $('#set-tts-volume').value = s.tts_volume ?? 1; $('#tts-volume-output').value = Number(s.tts_volume ?? 1).toFixed(2); $('#set-tts-tone').value = s.tts_tone || 'neutral'; $('#set-tts-intensity').value = s.tts_intensity ?? .7; $('#tts-intensity-output').value = `${Math.round(Number(s.tts_intensity ?? .7) * 100)}%`; $('#set-tts-pause-style').value = s.tts_pause_style || 'natural';
     $('#set-tts-max-chars').value = s.tts_max_chars ?? 1200; $('#set-tts-cpu-threads').value = s.tts_cpu_threads ?? 2; $('#set-tts-skip-code').checked = s.tts_skip_code !== false; $('#set-tts-skip-urls').checked = s.tts_skip_urls !== false; $('#set-tts-stop-previous').checked = s.tts_stop_previous !== false;
     syncTTSProviderUI();
     if ((s.tts_provider || 'browser') === 'edge' && !!s.tts_allow_online) setTimeout(() => { void loadEdgeVoices().catch(()=>{}); }, 0);
@@ -1676,7 +1764,7 @@
       auto_title_chats: $('#set-auto-title').checked, confirm_delete_chat: $('#set-confirm-delete').checked,
       voice_output_enabled: $('#set-voice-output').checked, tts_provider: $('#set-tts-provider').value, tts_auto_speak: $('#set-tts-auto-speak').checked, tts_allow_online: $('#set-tts-allow-online').checked,
       tts_edge_voice: $('#set-tts-edge-voice').value.trim(), tts_local_voice: $('#set-tts-local-voice').value.trim(), tts_online_fallback: $('#set-tts-fallback').value,
-      tts_rate: Number($('#set-tts-rate').value), tts_pitch: Number($('#set-tts-pitch').value), tts_max_chars: Number($('#set-tts-max-chars').value), tts_cpu_threads: Number($('#set-tts-cpu-threads').value),
+      tts_rate: Number($('#set-tts-rate').value), tts_pitch: Number($('#set-tts-pitch').value), tts_volume: Number($('#set-tts-volume').value), tts_tone: $('#set-tts-tone').value, tts_intensity: Number($('#set-tts-intensity').value), tts_pause_style: $('#set-tts-pause-style').value, tts_max_chars: Number($('#set-tts-max-chars').value), tts_cpu_threads: Number($('#set-tts-cpu-threads').value),
       tts_skip_code: $('#set-tts-skip-code').checked, tts_skip_urls: $('#set-tts-skip-urls').checked, tts_stop_previous: $('#set-tts-stop-previous').checked,
       retrieval_enabled: $('#set-retrieval-enabled').checked, retrieval_include_older_chat: $('#set-retrieval-chat').checked, retrieval_include_cross_chat: $('#set-retrieval-cross-chat').checked, retrieval_include_knowledge: $('#set-retrieval-knowledge').checked,
       retrieval_max_chunks: 4, retrieval_max_chars: 3600,
@@ -2436,7 +2524,7 @@
     $('#export-workspace').addEventListener('click', exportWorkspace); $('#import-workspace').addEventListener('click', () => $('#import-workspace-file').click()); $('#import-workspace-file').addEventListener('change', e => { const file=e.target.files?.[0]; if (file) importWorkspace(file); e.target.value=''; });
     $('#export-theme').addEventListener('click', exportTheme); $('#import-theme').addEventListener('click', () => $('#import-theme-file').click()); $('#import-theme-file').addEventListener('change', e => { const file=e.target.files?.[0]; if (file) importTheme(file); e.target.value=''; });
     $('#set-temperature').addEventListener('input', e => $('#temp-output').value=Number(e.target.value).toFixed(2)); $('#set-ui-scale').addEventListener('input',e=>$('#ui-scale-output').value=Number(e.target.value).toFixed(2)); $('#set-chat-scale').addEventListener('input',e=>$('#chat-scale-output').value=Number(e.target.value).toFixed(2));
-    $('#set-tts-rate').addEventListener('input', e => $('#tts-rate-output').value=Number(e.target.value).toFixed(2)); $('#set-tts-pitch').addEventListener('input', e => $('#tts-pitch-output').value=Number(e.target.value).toFixed(2));
+    $('#set-tts-rate').addEventListener('input', e => $('#tts-rate-output').value=Number(e.target.value).toFixed(2)); $('#set-tts-pitch').addEventListener('input', e => $('#tts-pitch-output').value=Number(e.target.value).toFixed(2)); $('#set-tts-volume').addEventListener('input', e => $('#tts-volume-output').value=Number(e.target.value).toFixed(2)); $('#set-tts-intensity').addEventListener('input', e => $('#tts-intensity-output').value=`${Math.round(Number(e.target.value)*100)}%`);
     $('#voice-preview').addEventListener('click', () => speakText('Matrix Studio voice systems online.', {preview:true, provider:$('#set-tts-provider').value, button:$('#voice-preview')}).catch(e => showToast(e.message || 'Voice preview failed', {title:'Voice', tone:'danger', duration:3200})));
     $('#voice-stop').addEventListener('click', () => stopSpeech({notifyBackend:true, release:false}));
     $('#set-voice-output').addEventListener('change', e => { state.settings.voice_output_enabled = !!e.target.checked; if (!e.target.checked) stopSpeech({notifyBackend:true, release:true}); renderChat('keep'); setTimeout(refreshTTSStatus, 180); });

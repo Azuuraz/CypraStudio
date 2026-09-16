@@ -22,6 +22,8 @@ from engine.security import host_header_is_loopback, origin_matches_request, sec
 from tts import LocalTTSService
 from tts.service import TTSCancelled
 from tts.policy import normalize_edge_voice, normalize_fallback, normalize_piper_voice, normalize_provider
+from tts.expression import build_speech_plan, normalize_pause_style, normalize_tone, resolve_tone
+from tts.sanitizer import sanitize_for_online_tts, sanitize_for_speech
 from engine.storage import (
     DEFAULT_SETTINGS,
     delete_session,
@@ -46,7 +48,7 @@ from engine.storage import (
 )
 
 ROOT = Path(__file__).resolve().parent
-BUILD_ID = "2.3.16-edge-voice-switch-20260916"
+BUILD_ID = "2.3.17-edge-expression-20260916"
 APP_ID = "matrixstudio2-local"
 INSTANCE_ID = os.environ.get("MATRIXSTUDIO2_INSTANCE_ID", "matrixstudio2-dev")
 BACKGROUND_DIR = ROOT / "data" / "background"
@@ -345,8 +347,20 @@ class TTSRequest(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
     voice_id: str | None = Field(default=None, max_length=128)
     provider: str | None = Field(default=None, max_length=24)
+    rate: float | None = Field(default=None, ge=0.5, le=2.0)
+    pitch: float | None = Field(default=None, ge=0.5, le=2.0)
+    volume: float | None = Field(default=None, ge=0.5, le=1.5)
+    tone: str | None = Field(default=None, max_length=16)
+    intensity: float | None = Field(default=None, ge=0.0, le=1.0)
     replace: bool | None = None
     preview: bool = False
+
+
+class TTSPlanRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=10000)
+    tone: str | None = Field(default=None, max_length=16)
+    intensity: float | None = Field(default=None, ge=0.0, le=1.0)
+    pause_style: str | None = Field(default=None, max_length=16)
 
 
 class TTSStopRequest(BaseModel):
@@ -819,9 +833,23 @@ def tts_status() -> dict[str, Any]:
         "online_fallback": normalize_fallback(settings.get("tts_online_fallback")),
         "rate": float(settings.get("tts_rate") or 1.0),
         "pitch": float(settings.get("tts_pitch") or 1.0),
+        "volume": float(settings.get("tts_volume") or 1.0),
+        "tone": normalize_tone(settings.get("tts_tone")),
+        "intensity": float(settings.get("tts_intensity") if settings.get("tts_intensity") is not None else 0.7),
+        "pause_style": normalize_pause_style(settings.get("tts_pause_style")),
         "auto_speak": bool(settings.get("tts_auto_speak")),
         "local": local,
     }
+
+
+@app.post("/api/tts/edge/prepare")
+def tts_edge_prepare() -> dict[str, Any]:
+    settings = load_settings()
+    if not bool(settings.get("tts_allow_online")):
+        raise HTTPException(409, "Edge dependency preparation is blocked until online TTS is explicitly allowed")
+    if not LOCAL_TTS.prepare_edge_dependency(allow_install=True):
+        raise HTTPException(503, "Edge voice support could not be prepared. Check internet access or bundled Setup packages.")
+    return {"ok": True, "ready": True}
 
 
 @app.get("/api/tts/voices/edge")
@@ -830,10 +858,57 @@ def tts_edge_voices(refresh: bool = False) -> dict[str, Any]:
     if not bool(settings.get("tts_allow_online")):
         raise HTTPException(409, "Edge voice discovery is blocked until online TTS is explicitly allowed")
     try:
+        if not LOCAL_TTS.prepare_edge_dependency(allow_install=False):
+            raise RuntimeError("Edge dependency is not prepared")
         voices = LOCAL_TTS.edge_voices(refresh=bool(refresh))
         return {"ok": True, "voices": voices, "count": len(voices), "cached": not bool(refresh)}
     except Exception as exc:
         raise HTTPException(503, f"Edge voice discovery unavailable ({type(exc).__name__})") from exc
+
+
+@app.post("/api/tts/plan")
+def tts_edge_plan(body: TTSPlanRequest) -> dict[str, Any]:
+    settings = load_settings()
+    if not bool(settings.get("tts_allow_online")):
+        raise HTTPException(409, "Edge speech planning is blocked until online TTS is explicitly allowed")
+
+    # Preserve line/paragraph intent through the privacy sanitizer without ever
+    # allowing the placeholders to reach the remote Edge service.
+    paragraph_token = "CYPRAZZPARABOUNDARYZZ"
+    line_token = "CYPRAZZLINEBOUNDARYZZ"
+    prepared = str(body.text or "").replace("\r\n", "\n").replace("\r", "\n")
+    import re as _re
+    prepared = _re.sub(r"\n\s*\n+", f" {paragraph_token} ", prepared)
+    prepared = _re.sub(r"\n+", f" {line_token} ", prepared)
+    try:
+        safe = sanitize_for_online_tts(prepared)
+        safe = sanitize_for_speech(
+            safe,
+            maximum=int(settings.get("tts_max_chars") or 1200),
+            skip_code=bool(settings.get("tts_skip_code", True)),
+            skip_urls=bool(settings.get("tts_skip_urls", True)),
+            privacy_harden=True,
+        )
+    except Exception as exc:
+        raise HTTPException(422, "Speech planning failed privacy sanitization") from exc
+    safe = safe.replace(paragraph_token, "\n\n").replace(line_token, "\n")
+    if not safe.strip():
+        raise HTTPException(422, "Nothing speakable remains after sanitization")
+
+    requested_tone = normalize_tone(body.tone if body.tone is not None else settings.get("tts_tone"))
+    resolved = resolve_tone(requested_tone, safe)
+    pause_style = normalize_pause_style(body.pause_style if body.pause_style is not None else settings.get("tts_pause_style"))
+    intensity = max(0.0, min(1.0, float(body.intensity if body.intensity is not None else settings.get("tts_intensity", 0.7))))
+    segments = build_speech_plan(safe, style=pause_style, maximum_segments=24)
+    if not segments:
+        raise HTTPException(422, "Nothing speakable remains after speech planning")
+    return {
+        "ok": True,
+        "tone": resolved,
+        "intensity": intensity,
+        "pause_style": pause_style,
+        "segments": segments,
+    }
 
 
 @app.post("/api/tts/stop")
@@ -870,7 +945,11 @@ def tts_synthesize(body: TTSRequest) -> Response:
             body.text,
             provider=requested,
             voice=voice,
-            speed=float(settings.get("tts_rate") or 1.0),
+            speed=float(body.rate if body.rate is not None else settings.get("tts_rate") or 1.0),
+            pitch=float(body.pitch if body.pitch is not None else settings.get("tts_pitch") or 1.0),
+            volume=float(body.volume if body.volume is not None else settings.get("tts_volume") or 1.0),
+            tone=normalize_tone(body.tone if body.tone is not None else settings.get("tts_tone")),
+            intensity=float(body.intensity if body.intensity is not None else settings.get("tts_intensity", 0.7)),
             threads=int(settings.get("tts_cpu_threads") or 2),
             maximum=int(settings.get("tts_max_chars") or 1200),
             skip_code=bool(settings.get("tts_skip_code", True)),

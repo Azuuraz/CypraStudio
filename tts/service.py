@@ -7,6 +7,10 @@ from dataclasses import dataclass
 import asyncio
 import io
 import logging
+import importlib
+import os
+import subprocess
+import sys
 from pathlib import Path
 import queue
 import re
@@ -16,6 +20,7 @@ import wave
 from .engines.piper_engine import PiperEngine
 from .engines.edge_engine import EdgeEngine, EdgeUnavailable
 from .sanitizer import sanitize_for_online_tts, sanitize_for_speech
+from .expression import resolve_edge_prosody
 
 
 log = logging.getLogger("cypra.tts")
@@ -37,6 +42,10 @@ class _SpeechRequest:
     text: str
     voice: str
     speed: float
+    pitch: float
+    volume: float
+    tone: str
+    intensity: float
     threads: int
     generation: int
     provider: str
@@ -78,6 +87,7 @@ class LocalTTSService:
         self._edge_loop: asyncio.AbstractEventLoop | None = None
         self._edge_task: asyncio.Task[bytes] | None = None
         self._edge_voices: list[dict] | None = None
+        self._edge_install_lock = threading.Lock()
 
     def installed_voices(self) -> list[str]:
         return PiperEngine.installed_voices(self.voices_dir)
@@ -135,6 +145,10 @@ class LocalTTSService:
         *,
         voice: str = "en_US-lessac-medium",
         speed: float = 1.0,
+        pitch: float = 1.0,
+        volume: float = 1.0,
+        tone: str = "neutral",
+        intensity: float = 0.7,
         threads: int = 2,
         maximum: int = 1000,
         skip_code: bool = True,
@@ -146,6 +160,10 @@ class LocalTTSService:
             text,
             voice=voice,
             speed=speed,
+            pitch=pitch,
+            volume=volume,
+            tone=tone,
+            intensity=intensity,
             threads=threads,
             maximum=maximum,
             skip_code=skip_code,
@@ -162,6 +180,10 @@ class LocalTTSService:
         provider: str = "local",
         voice: str = "en_US-lessac-medium",
         speed: float = 1.0,
+        pitch: float = 1.0,
+        volume: float = 1.0,
+        tone: str = "neutral",
+        intensity: float = 0.7,
         threads: int = 2,
         maximum: int = 1000,
         skip_code: bool = True,
@@ -206,6 +228,10 @@ class LocalTTSService:
             text=spoken,
             voice=voice,
             speed=max(0.5, min(2.0, float(speed))),
+            pitch=max(0.5, min(2.0, float(pitch))),
+            volume=max(0.5, min(1.5, float(volume))),
+            tone=str(tone or "neutral").strip().lower(),
+            intensity=max(0.0, min(1.0, float(intensity))),
             threads=max(1, min(4, int(threads))),
             generation=generation,
             provider=provider,
@@ -284,6 +310,43 @@ class LocalTTSService:
             log.info("[TTS] ready")
         return self._engine
 
+    def prepare_edge_dependency(self, *, allow_install: bool) -> bool:
+        """Ensure edge-tts is importable without ever installing behind a closed gate."""
+        if self._edge_available():
+            return True
+        if not allow_install:
+            return False
+        with self._edge_install_lock:
+            if self._edge_available():
+                return True
+            package = "edge-tts>=6.1,<8"
+            base_args = [
+                sys.executable, "-m", "pip", "install",
+                "--disable-pip-version-check", "--retries", "1", "--timeout", "15",
+            ]
+            offline = self.project_root / "Setup" / "python_packages"
+            attempts: list[list[str]] = []
+            if offline.exists() and any(path.is_file() and path.suffix.lower() in {".whl", ".zip"} for path in offline.iterdir()):
+                attempts.append(base_args + ["--no-index", "--find-links", str(offline), package])
+            attempts.append(base_args + [package])
+            for args in attempts:
+                try:
+                    result = subprocess.run(
+                        args,
+                        cwd=str(self.project_root),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=90,
+                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    continue
+                if result.returncode == 0:
+                    importlib.invalidate_caches()
+                    if self._edge_available():
+                        return True
+            return False
+
     def edge_voices(self, *, refresh: bool = False) -> list[dict[str, str]]:
         """Discover all Edge voices lazily; callers enforce the online permission gate."""
         with self._lock:
@@ -338,6 +401,16 @@ class LocalTTSService:
             if request.fallback == "piper":
                 return self._piper_synthesis(request, fallback=True)
             raise EdgeUnavailable("No safe online speech remains")
+        if not self.prepare_edge_dependency(allow_install=request.online_allowed):
+            raise EdgeUnavailable("edge-tts is not installed and could not be prepared")
+        prosody = resolve_edge_prosody(
+            request.tone,
+            intensity=request.intensity,
+            speed=request.speed,
+            pitch=request.pitch,
+            volume=request.volume,
+            text=edge_text,
+        )
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
@@ -345,7 +418,9 @@ class LocalTTSService:
                 EdgeEngine().synthesize(
                     edge_text,
                     voice=request.voice or "en-US-AvaNeural",
-                    speed=request.speed,
+                    rate=prosody["rate"],
+                    pitch=prosody["pitch"],
+                    volume=prosody["volume"],
                     cancelled=lambda: self._cancelled(request.generation),
                 )
             )

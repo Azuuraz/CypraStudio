@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from tts.policy import normalize_edge_voice, normalize_fallback, normalize_piper_voice, normalize_provider
+from tts.expression import normalize_pause_style, normalize_tone
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -20,7 +21,7 @@ UI_STATE_PATH = DATA / "ui_state.json"
 _LOCK = threading.RLock()
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "settings_schema": 11,
+    "settings_schema": 12,
     "port": 8765,
     "ollama_chat_model": "llama3.2:3b",
     "ollama_num_ctx": 8192,
@@ -49,6 +50,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "tts_online_fallback": "browser",
     "tts_rate": 1.0,
     "tts_pitch": 1.0,
+    "tts_volume": 1.0,
+    "tts_tone": "neutral",
+    "tts_intensity": 0.7,
+    "tts_pause_style": "natural",
     "tts_auto_speak": False,
     "tts_skip_code": True,
     "tts_skip_urls": True,
@@ -178,11 +183,21 @@ def _coerce_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     out["tts_edge_voice"] = normalize_edge_voice(out.get("tts_edge_voice"))
     out["tts_local_voice"] = normalize_piper_voice(out.get("tts_local_voice"))
     out["tts_online_fallback"] = normalize_fallback(out.get("tts_online_fallback"))
+    out["tts_tone"] = normalize_tone(out.get("tts_tone"))
+    out["tts_pause_style"] = normalize_pause_style(out.get("tts_pause_style"))
     for key in ("tts_rate", "tts_pitch"):
         try:
             out[key] = max(0.5, min(2.0, float(out.get(key) or 1.0)))
         except Exception:
             out[key] = 1.0
+    try:
+        out["tts_volume"] = max(0.5, min(1.5, float(out.get("tts_volume") or 1.0)))
+    except Exception:
+        out["tts_volume"] = 1.0
+    try:
+        out["tts_intensity"] = max(0.0, min(1.0, float(out.get("tts_intensity") if out.get("tts_intensity") is not None else 0.7)))
+    except Exception:
+        out["tts_intensity"] = 0.7
     try:
         out["tts_max_chars"] = max(100, min(10000, int(out.get("tts_max_chars") or 1200)))
     except Exception:
@@ -247,7 +262,7 @@ def _coerce_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     out["system_prompt"] = prompt
     specialist = str(out.get("selected_specialist_id") or "").strip().lower()
     out["selected_specialist_id"] = "".join(ch for ch in specialist if ch.isalnum() or ch in "-_")[:120]
-    out["settings_schema"] = 11
+    out["settings_schema"] = 12
     return out
 
 
@@ -296,7 +311,7 @@ def reset_settings(section: str = "all") -> dict[str, Any]:
     groups = {
         "runtime": {"port", "ollama_chat_model", "ollama_num_ctx", "ollama_keep_alive", "ollama_num_predict"},
         "chat": {"chat_temperature", "history_turns", "plain_chat", "show_generation_stats", "show_message_model", "auto_title_chats", "confirm_delete_chat", "system_prompt", "retrieval_enabled", "retrieval_include_knowledge", "retrieval_include_older_chat", "retrieval_include_cross_chat", "retrieval_max_chunks", "retrieval_max_chars"},
-        "voice": {"voice_output_enabled", "tts_provider", "tts_allow_online", "tts_edge_voice", "tts_local_voice", "tts_online_fallback", "tts_rate", "tts_pitch", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_max_chars", "tts_stop_previous", "tts_cpu_threads"},
+        "voice": {"voice_output_enabled", "tts_provider", "tts_allow_online", "tts_edge_voice", "tts_local_voice", "tts_online_fallback", "tts_rate", "tts_pitch", "tts_volume", "tts_tone", "tts_intensity", "tts_pause_style", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_max_chars", "tts_stop_previous", "tts_cpu_threads"},
         "reasoning": {"think_mode", "show_model_thinking"},
         "specialists": {"selected_specialist_id"},
         "appearance": {"ui_mode", "theme_preset", "ui_density", "ui_font_scale", "chat_font_scale", "reduce_motion", "window_width", "window_height", "custom_colors_enabled", "accent_color", "accent_secondary", "background_color", "panel_color", "user_bubble_color", "assistant_bubble_color", "muted_text_color", "background_image_enabled", "background_image_version", "background_image_opacity", "background_blur", "background_dim", "background_zoom", "background_fit", "gradients_enabled", "gradient_strength", "panel_opacity", "panel_blur", "glow_strength"},
