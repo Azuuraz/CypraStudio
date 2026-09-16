@@ -23,6 +23,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
 </p>
 
 > Current build: `2.3.17-edge-expression-20260916`
+> Main Chat: `Future additions will be added...`
 
 ## Features
 
