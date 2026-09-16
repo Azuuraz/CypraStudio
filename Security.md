@@ -6,14 +6,6 @@ CypraStudio is a local-first desktop application that combines a native WebView2
 
 Security fixes are maintained against the current CypraStudio release line. When reporting an issue, reproduce it on the newest available build when practical.
 
-Current documented build:
-
-```text
-2.3.16-edge-voice-switch-20260916
-```
-
-Older builds may contain issues already addressed by later runtime, persistence, TTS, or request-boundary hardening.
-
 ## Security model
 
 CypraStudio currently uses the following protections:
