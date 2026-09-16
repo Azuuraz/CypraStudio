@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07100d">
+  <title>MatrixStudio2.0</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=quiet-rag-2313">
+</head>
+<body data-theme="matrix" data-mode="dark">
+  <div class="workspace-background" aria-hidden="true">
+    <div class="workspace-bg-edge edge-top"></div>
+    <div class="workspace-bg-edge edge-right"></div>
+    <div class="workspace-bg-edge edge-bottom"></div>
+    <div class="workspace-bg-edge edge-left"></div>
+    <div class="workspace-bg-image"></div>
+    <div class="workspace-bg-shade"></div>
+  </div>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Chat sessions">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span>M</span><sup>2</sup></div>
+        <div class="brand-copy"><strong>MatrixStudio2.0</strong><span>LOCAL STUDIO</span></div>
+      </div>
+
+      <button class="new-chat" id="new-chat" type="button"><span>＋</span><strong>NEW CHAT</strong><kbd>Ctrl N</kbd></button>
+      <label class="search-box" aria-label="Search conversations">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
+        <input id="session-search" placeholder="Search conversations…" autocomplete="off">
+        <kbd>/</kbd>
+      </label>
+
+      <div class="sidebar-section-title">YOUR CONVERSATIONS</div>
+      <div class="session-list" id="session-list"></div>
+
+      <div class="sidebar-bottom">
+        <div class="runtime-mini" id="runtime-mini">
+          <span class="status-dot" id="runtime-dot"></span>
+          <div><strong id="runtime-label">Checking local runtime…</strong><span id="runtime-endpoint">127.0.0.1</span></div>
+        </div>
+        <button class="workspace-btn" id="open-settings-side" type="button"><span>Customize workspace</span><span>↗</span></button>
+        <button class="shutdown-quick-btn" id="kill-host-exit" type="button" title="Save settings, stop the project-local host, and exit MatrixStudio2.0"><span aria-hidden="true">⏻</span><span>KILL HOST + EXIT</span></button>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div class="chat-heading">
+          <button class="nav-icon" id="sidebar-toggle" type="button" aria-label="Toggle sidebar">☰</button>
+          <div><strong id="chat-title">New chat</strong><span id="chat-meta">Local model</span></div>
+        </div>
+        <div class="quick-controls">
+          <div class="control-menu-group">
+            <button class="quick-menu-trigger" id="quick-model-trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+              <span class="control-label">MODEL</span>
+              <strong class="control-value" id="quick-model-label">Loading models…</strong>
+              <span class="control-meta" id="quick-model-meta">Portable store</span>
+              <span class="control-caret" aria-hidden="true">⌄</span>
+            </button>
+            <select id="quick-model" aria-label="Chat model" hidden></select>
+          </div>
+          <div class="control-menu-group compact reasoning-select">
+            <button class="quick-menu-trigger" id="quick-think-trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+              <span class="control-label">REASONING</span>
+              <strong class="control-value" id="quick-think-label">AUTO THINK</strong>
+              <span class="control-meta" id="quick-think-meta">Balanced routing</span>
+              <span class="control-caret" aria-hidden="true">⌄</span>
+            </button>
+            <select id="quick-think" aria-label="Reasoning mode" hidden><option value="auto">AUTO THINK</option><option value="standard">STANDARD THINK</option><option value="deep">DEEP REASONING</option></select>
+          </div>
+          <button class="top-action specialist-trigger" id="open-specialists" type="button"><span>SPECIALISTS</span><em id="specialist-top-status">BASE</em></button>
+          <button class="top-action" id="open-settings" type="button">Settings</button>
+        </div>
+      </header>
+
+      <div class="content-stage">
+        <div class="ambient-grid" aria-hidden="true"></div>
+        <div class="ambient-fx" aria-hidden="true">
+          <div class="ambient-orb orb-a"></div>
+          <div class="ambient-orb orb-b"></div>
+          <div class="ambient-orb orb-c"></div>
+          <div class="ambient-beam beam-a"></div>
+          <div class="ambient-beam beam-b"></div>
+          <div class="ambient-particles" id="ambient-particles"></div>
+        </div>
+
+        <section class="model-alert" id="model-alert" hidden>
+          <div class="model-alert-icon">!</div>
+          <div class="model-alert-copy"><strong id="model-alert-title">No local model installed</strong><span id="model-alert-text">MatrixStudio2.0 is online, but chat needs a model in this project’s private model store.</span></div>
+          <button class="btn ghost" id="model-alert-settings" type="button">RUNTIME SETTINGS</button>
+          <button class="btn ghost" id="model-alert-reconnect" type="button" hidden>RECONNECT</button>
+          <button class="btn primary" id="install-starter" type="button">INSTALL STARTER MODEL</button>
+        </section>
+
+        <section class="messages" id="messages" aria-live="polite"></section>
+
+      </div>
+
+      <footer class="composer-wrap">
+        <div class="composer-shell">
+          <div class="composer">
+            <textarea id="chat-input" rows="1" placeholder="Ask anything. Make something. Think it through…" aria-label="Message local model"></textarea>
+            <div class="composer-actions">
+              <button class="composer-tool" id="export-chat" type="button" title="Export current chat">EXPORT CHAT</button>
+              <button class="composer-tool danger" id="stop-chat" type="button" hidden>STOP</button>
+              <button class="send-btn" id="send-chat" type="button">SEND</button>
+            </div>
+          </div>
+          <div class="compose-note compact-note"><span id="compose-status">Ready</span><span id="message-count">0 messages</span></div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="control-menu-layer" id="control-menu-layer" hidden>
+    <section class="control-menu-panel" id="control-menu-panel" role="dialog" aria-modal="false" aria-label="Quick controls menu">
+      <div class="control-menu-head">
+        <div>
+          <span class="eyebrow" id="control-menu-kicker">MODEL</span>
+          <strong id="control-menu-title">Portable models</strong>
+          <p id="control-menu-copy">Choose the active local model for this chat.</p>
+        </div>
+        <button class="icon-btn" id="control-menu-close" type="button" aria-label="Close quick menu">×</button>
+      </div>
+      <label class="control-menu-search" id="control-menu-search-wrap" hidden>
+        <span>SEARCH</span>
+        <input id="control-menu-search" autocomplete="off" placeholder="Filter options…">
+      </label>
+      <div class="control-menu-list" id="control-menu-list"></div>
+      <div class="control-menu-foot" id="control-menu-foot"></div>
+    </section>
+  </div>
+
+  <dialog class="command-dialog" id="command-dialog">
+    <div class="command-panel">
+      <div class="command-search-row"><span>⌘</span><input id="command-input" autocomplete="off" placeholder="Type a command…"><kbd>Esc</kbd></div>
+      <div class="command-list" id="command-list"></div>
+      <div class="command-hint"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> run</span><span><kbd>Ctrl K</kbd> open</span></div>
+    </div>
+  </dialog>
+
+  <dialog class="specialist-dialog" id="specialist-dialog">
+    <div class="specialist-panel">
+      <div class="specialist-head">
+        <div><span class="eyebrow">MANUAL MATRIX SPECIALISTS</span><h2>Specialist groups</h2><p>No automatic routing. Normal chat keeps the base system prompt until you explicitly select a specialist.</p></div>
+        <button class="icon-btn" id="close-specialists" type="button" aria-label="Close specialists">×</button>
+      </div>
+      <div class="specialist-selected" id="specialist-selected">
+        <div><span>ACTIVE MODE</span><strong id="specialist-selected-name">Base assistant</strong><small id="specialist-selected-detail">Be accurate, practical, concise, and complete.</small></div>
+        <button class="btn ghost small" id="clear-specialist" type="button">USE BASE</button>
+      </div>
+      <div class="specialist-search-row"><input id="specialist-search" autocomplete="off" placeholder="Search specialists in the selected group…"><span id="specialist-count">700 local specialists</span></div>
+      <div class="specialist-layout">
+        <nav class="specialist-groups" id="specialist-groups" aria-label="Specialist groups"></nav>
+        <section class="specialist-agents" id="specialist-agents" aria-live="polite"></section>
+      </div>
+      <div class="specialist-foot"><span>One resident model · one inference path · manual selection only</span><button class="btn ghost" id="specialist-done" type="button">DONE</button></div>
+    </div>
+  </dialog>
+
+  <dialog class="settings-dialog" id="settings-dialog">
+    <form method="dialog" id="settings-form">
+      <div class="settings-head">
+        <div><span class="eyebrow">MATRIXSTUDIO2.0</span><h2>Settings</h2><p>Versioned, searchable controls. Each section resets independently.</p></div>
+        <label class="settings-search"><span>SEARCH</span><input id="settings-search" autocomplete="off" placeholder="Find a setting…"></label>
+        <button class="icon-btn" id="close-settings" type="button" aria-label="Close settings">×</button>
+      </div>
+      <div class="settings-layout">
+        <nav class="settings-nav">
+          <button class="settings-tab active" data-tab="runtime" type="button"><span>01</span> Runtime</button>
+          <button class="settings-tab" data-tab="chat" type="button"><span>02</span> Chat</button>
+          <button class="settings-tab" data-tab="voice" type="button"><span>03</span> Voice</button>
+          <button class="settings-tab" data-tab="reasoning" type="button"><span>04</span> Reasoning</button>
+          <button class="settings-tab" data-tab="appearance" type="button"><span>05</span> Appearance</button>
+          <button class="settings-tab" data-tab="data" type="button"><span>06</span> Import / Export</button>
+          <button class="settings-tab" data-tab="advanced" type="button"><span>07</span> Reset / Advanced</button>
+          <button class="settings-tab" data-tab="about" type="button"><span>08</span> About</button>
+        </nav>
+        <div class="settings-content">
+          <section class="settings-page active" data-page="runtime">
+            <div class="page-title"><div><h3>Local runtime</h3><p>Private loopback Ollama using this project’s <code>OllamaModels</code> folder.</p></div><button class="btn ghost small reset-section" data-section="runtime" type="button">RESET</button></div>
+            <div class="runtime-grid">
+              <div class="runtime-card"><span>STATE</span><strong id="set-runtime-state">—</strong></div>
+              <div class="runtime-card"><span>MODELS</span><strong id="set-runtime-count">—</strong></div>
+              <div class="runtime-card"><span>SELECTED MODEL</span><strong id="set-runtime-selected">—</strong></div>
+              <div class="runtime-card"><span>LOADED VRAM</span><strong id="set-runtime-vram">—</strong></div>
+              <div class="runtime-card"><span>PROCESSOR</span><strong id="set-runtime-processor">—</strong></div>
+              <div class="runtime-card wide-card"><span>ENDPOINT</span><strong id="set-runtime-endpoint">—</strong></div>
+              <div class="runtime-card wide-card"><span>MODEL STORE</span><strong id="set-runtime-store">—</strong></div>
+              <div class="runtime-card wide-card"><span>LOADED</span><strong id="set-runtime-loaded">—</strong></div>
+              <div class="runtime-card wide-card"><span>HEALTH</span><strong id="set-runtime-health">—</strong></div>
+            </div>
+            <div class="field-grid">
+              <label class="field"><span>Chat model</span><select id="set-model"></select><small>Only models in this private project store are selectable.</small></label>
+              <label class="field"><span>Context size</span><select id="set-context"><option value="4096">4K</option><option value="8192">8K</option><option value="16384">16K</option><option value="32768">32K</option><option value="65536">64K</option><option value="131072">128K</option></select><small>Higher context uses more VRAM/RAM.</small></label>
+              <label class="field"><span>Keep alive</span><input id="set-keepalive" placeholder="5m"><small>Examples: 5m, 30m, -1.</small></label>
+              <label class="field"><span>Max reply tokens</span><input id="set-num-predict" type="number" min="-1" step="1"><small>-1 lets Ollama/model decide.</small></label>
+            </div>
+            <div class="button-row"><button class="btn ghost" id="refresh-runtime" type="button">REFRESH</button><button class="btn ghost" id="reconnect-runtime" type="button">RECONNECT</button><button class="btn ghost" id="warm-model" type="button">WARM MODEL</button><button class="btn ghost" id="unload-model" type="button">UNLOAD VRAM</button><button class="btn danger" id="kill-localhost" type="button">KILL HOST</button></div>
+            <div class="model-manager">
+              <div class="model-manager-head"><div><strong>Model manager</strong><p>Installed models in this portable store. MatrixStudio keeps one resident model loaded at a time.</p></div><span id="model-manager-summary">—</span></div>
+              <div class="model-manager-list" id="model-manager-list"></div>
+            </div>
+            <div class="pull-box">
+              <div class="pull-copy"><strong>Install a model</strong><p>Downloads go directly into <code>OllamaModels</code>. The host Ollama model library is not used.</p></div>
+              <div class="starter-row"><button class="starter-chip" id="starter-chip" type="button">llama3.2:3b</button><span>Recommended starter</span></div>
+              <div class="pull-row"><input id="pull-model" placeholder="e.g. llama3.2:3b"><button class="btn primary" id="pull-model-btn" type="button">PULL MODEL</button></div>
+              <div class="pull-progress" id="pull-progress" hidden><div><span id="pull-label">Starting…</span><span id="pull-percent"></span></div><progress id="pull-bar" max="100" value="0"></progress></div>
+            </div>
+            <section class="hf-box" id="hf-box">
+              <div class="hf-head">
+                <div><span class="eyebrow">HUGGING FACE GGUF · EXPERIMENTAL</span><strong>Find larger local models without changing the runtime.</strong><p>Public GGUF repositories only. Abliterated/uncensored models are allowed. MatrixStudio downloads the exact quant you choose, verifies it, then registers it into this project’s private Ollama store.</p></div>
+                <span class="hf-target-badge">6 GB TARGET</span>
+              </div>
+              <div class="hf-search-row">
+                <input id="hf-search" autocomplete="off" placeholder="Search or paste owner/repo / Hugging Face URL">
+                <button class="btn ghost" id="hf-search-btn" type="button">SEARCH</button>
+              </div>
+              <div class="hf-status" id="hf-status">Search the public Hugging Face Hub or paste an exact GGUF repository.</div>
+              <div class="hf-results" id="hf-results" hidden></div>
+              <div class="hf-repo" id="hf-repo" hidden>
+                <div class="hf-repo-head">
+                  <div><span>REPOSITORY</span><strong id="hf-repo-name">—</strong><small id="hf-repo-meta">—</small></div>
+                  <label class="hf-sort"><span>SORT</span><select id="hf-sort"><option value="largest-fit">Largest likely 6 GB fit</option><option value="size">Smallest download</option><option value="quant">Quant name</option></select></label>
+                </div>
+                <div class="hf-quant-list" id="hf-quant-list"></div>
+                <div class="hf-install-controls">
+                  <label class="field"><span>Local model name</span><input id="hf-local-name" autocomplete="off" placeholder="Generated from repo + quant"><small>Safe characters are normalized automatically.</small></label>
+                  <label class="hf-select-after"><span><strong>Use after install</strong><small>Switch to the new model only after Ollama confirms creation.</small></span><input id="hf-select-after" type="checkbox" checked></label>
+                  <button class="btn primary" id="hf-install-btn" type="button" disabled>INSTALL SELECTED GGUF</button>
+                </div>
+              </div>
+              <div class="hf-install-progress" id="hf-install-progress" hidden>
+                <div class="hf-progress-head"><div><strong id="hf-install-phase">Preparing…</strong><span id="hf-install-detail">—</span></div><button class="btn ghost small" id="hf-install-cancel" type="button">CANCEL</button></div>
+                <progress id="hf-install-bar" max="100" value="0"></progress>
+                <div class="hf-progress-meta"><span id="hf-install-bytes"></span><span id="hf-install-model"></span></div>
+              </div>
+              <div class="hf-guardrail-note"><strong>VRAM labels are estimates.</strong><span>GGUF size is not total runtime VRAM. Context/KV cache, architecture, and GPU offload can move a model between tiers.</span></div>
+            </section>
+          </section>
+
+          <section class="settings-page" data-page="chat">
+            <div class="page-title"><div><h3>Chat behavior</h3><p>Conversation memory, response style, metadata, and the default base instruction.</p></div><button class="btn ghost small reset-section" data-section="chat" type="button">RESET</button></div>
+            <div class="field-grid">
+              <label class="field"><span>Temperature <output id="temp-output">0.65</output></span><input id="set-temperature" type="range" min="0" max="2" step="0.05"></label>
+              <label class="field"><span>History turns</span><input id="set-history" type="number" min="1" max="64" step="1"><small>How much of the current chat is sent back to the model.</small></label>
+            </div>
+            <div class="toggle-list">
+              <label><span><strong>Plain chat</strong><small>Ask for natural prose instead of rigid report templates.</small></span><input id="set-plain-chat" type="checkbox"></label>
+              <label><span><strong>Generation stats</strong><small>Show token counts, speed, and elapsed generation time below model replies.</small></span><input id="set-show-stats" type="checkbox"></label>
+              <label><span><strong>Show model name on replies</strong><small>Off by default. Model + reasoning context is still available on message hover.</small></span><input id="set-show-message-model" type="checkbox"></label>
+              <label><span><strong>Auto-title chats</strong><small>Use the first user message as the conversation title. Manual renames are never overwritten.</small></span><input id="set-auto-title" type="checkbox"></label>
+              <label><span><strong>Confirm before deleting chats</strong><small>Keeps session cleanup deliberate. Disable only if you prefer one-click delete.</small></span><input id="set-confirm-delete" type="checkbox"></label>
+            </div>
+            <div class="settings-note">
+              <strong>Quiet local retrieval</strong>
+              <span>RAG stays invisible unless a prompt has a useful match. It can recover older turns, relevant facts from other saved chats, and small text files you place in the local Knowledge folder. No graph is maintained.</span>
+            </div>
+            <div class="toggle-list compact-toggle">
+              <label><span><strong>Enable quiet retrieval</strong><small>Add only relevant local context to the prompt.</small></span><input id="set-retrieval-enabled" type="checkbox"></label>
+              <label><span><strong>Older chat memory</strong><small>Search only turns that have fallen outside the normal History turns window.</small></span><input id="set-retrieval-chat" type="checkbox"></label>
+              <label><span><strong>Cross-chat memory</strong><small>Retrieve a few relevant facts from other saved conversations. Indexes only chats that changed.</small></span><input id="set-retrieval-cross-chat" type="checkbox"></label>
+              <label><span><strong>Knowledge folder</strong><small>Lazy-index local TXT, Markdown, JSON, CSV, LOG, Python, PowerShell, BAT, INI, and CFG files.</small></span><input id="set-retrieval-knowledge" type="checkbox"></label>
+            </div>
+            <div class="background-actions">
+              <button class="btn ghost" id="open-knowledge-folder" type="button">OPEN KNOWLEDGE FOLDER</button>
+              <button class="btn ghost" id="reindex-knowledge" type="button">REINDEX</button>
+              <span id="retrieval-status">Lazy index · bounded context</span>
+            </div>
+            <label class="field full"><span>Base system prompt</span><textarea id="set-system-prompt" rows="6"></textarea><small>Default: “Be accurate, practical, concise, and complete.” Manual specialists append their own directive only while explicitly selected.</small></label>
+          </section>
+
+
+          <section class="settings-page" data-page="voice">
+            <div class="page-title"><div><h3>Voice output</h3><p>Speak model replies with a device voice, optional local Piper, or opt-in Microsoft Edge neural speech.</p></div><button class="btn ghost small reset-section" data-section="voice" type="button">RESET</button></div>
+            <div class="toggle-list">
+              <label><span><strong>Enable voice output</strong><small>Adds SPEAK controls to model replies. Off by default.</small></span><input id="set-voice-output" type="checkbox"></label>
+              <label><span><strong>Auto-speak new replies</strong><small>Speak completed model replies automatically while voice output is enabled.</small></span><input id="set-tts-auto-speak" type="checkbox"></label>
+              <label><span><strong>Allow online Edge TTS</strong><small>Explicit privacy gate. Only sanitized speech text may leave the computer for Microsoft Edge speech synthesis.</small></span><input id="set-tts-allow-online" type="checkbox"></label>
+            </div>
+            <div class="field-grid">
+              <label class="field"><span>Voice provider</span><select id="set-tts-provider"><option value="browser">Device / browser voice</option><option value="edge">Edge neural voice (online)</option><option value="local">Piper local voice</option><option value="off">Off</option></select><small>The provider-specific controls below swap automatically. Edge voice discovery only runs after the online privacy gate is enabled.</small></label>
+              <div class="field" id="tts-edge-voice-field" hidden><span>Edge voice</span><select id="set-tts-edge-voice"><option value="en-US-AvaNeural">Ava · en-US · Neural</option></select><small id="edge-voice-status">Enable online Edge TTS to load the full Microsoft voice catalog.</small><button class="btn ghost small" id="refresh-edge-voices" type="button">REFRESH VOICES</button></div>
+              <label class="field" id="tts-local-voice-field" hidden><span>Local Piper voice</span><input id="set-tts-local-voice" autocomplete="off" value="en_US-lessac-medium"><small>Uses project-local Piper voice assets when installed.</small></label>
+              <label class="field" id="tts-edge-fallback-field" hidden><span>Edge failure fallback</span><select id="set-tts-fallback"><option value="browser">Device / browser voice</option><option value="piper">Piper local voice</option><option value="none">No fallback</option></select></label>
+              <label class="field"><span>Speech rate <output id="tts-rate-output">1.00</output></span><input id="set-tts-rate" type="range" min="0.5" max="2" step="0.05"></label>
+              <label class="field"><span>Speech pitch <output id="tts-pitch-output">1.00</output></span><input id="set-tts-pitch" type="range" min="0.5" max="2" step="0.05"><small>Applied by device/browser speech; server engines may use their native voice characteristics.</small></label>
+              <label class="field"><span>Maximum spoken characters</span><input id="set-tts-max-chars" type="number" min="100" max="10000" step="100"><small>Long replies are clipped at a sensible sentence boundary.</small></label>
+              <label class="field"><span>Piper CPU threads</span><input id="set-tts-cpu-threads" type="number" min="1" max="4" step="1"><small>Piper stays CPU-only so it does not compete with the local model for VRAM.</small></label>
+            </div>
+            <div class="toggle-list compact-toggle">
+              <label><span><strong>Skip code</strong><small>Do not read fenced code blocks aloud.</small></span><input id="set-tts-skip-code" type="checkbox"></label>
+              <label><span><strong>Skip URLs</strong><small>Do not read web addresses aloud.</small></span><input id="set-tts-skip-urls" type="checkbox"></label>
+              <label><span><strong>Stop previous speech</strong><small>Starting a new reply cancels current synthesis/playback first.</small></span><input id="set-tts-stop-previous" type="checkbox"></label>
+            </div>
+            <div class="settings-note"><strong>Privacy boundary.</strong><span>Piper stays local and CPU-only. The browser/device provider makes no MatrixStudio Edge request, though the operating system/browser controls how its installed speech voices are implemented. Edge is never contacted unless Allow online Edge TTS is enabled; outgoing text is sanitized again on the backend before synthesis.</span></div>
+            <div class="background-actions"><button class="btn primary" id="voice-preview" type="button">PREVIEW VOICE</button><button class="btn ghost" id="voice-stop" type="button">STOP VOICE</button><span id="tts-status">Voice output is off</span></div>
+          </section>
+
+          <section class="settings-page" data-page="reasoning">
+            <div class="page-title"><div><h3>Reasoning</h3><p>AUTO can now escalate a difficult prompt to Deep without running a second model call. Standard and Deep remain hard overrides.</p></div><button class="btn ghost small reset-section" data-section="reasoning" type="button">RESET</button></div>
+            <div class="field-grid">
+              <label class="field"><span>Reasoning mode</span><select id="set-think"><option value="auto">AUTO THINK</option><option value="standard">STANDARD THINK</option><option value="deep">DEEP REASONING</option></select><small>The header selector and this setting are the same persisted control.</small></label>
+            </div>
+            <div class="reasoning-mode-guide">
+              <div><strong>AUTO THINK</strong><span>Fast local routing: trivial prompts use Direct, normal analysis uses Standard, and complex multi-step prompts use Deep.</span></div>
+              <div><strong>STANDARD THINK</strong><span>Always requests the model's normal thinking mode for every turn.</span></div>
+              <div><strong>DEEP REASONING</strong><span>Always requests the highest supported reasoning level, with compatibility fallback for models that only support on/off thinking.</span></div>
+            </div>
+            <div class="toggle-list reasoning-visibility">
+              <label><span><strong>Show model thinking</strong><small>Show the expandable Model Think panel. During AUTO it also displays the route selected for that turn, such as AUTO → DEEP.</small></span><input id="set-show-thinking" type="checkbox"></label>
+            </div>
+            <div class="settings-note"><strong>No extra inference.</strong><span>AUTO is a lightweight local heuristic. It does not call a planner, agent, or second model before your reply begins.</span></div>
+          </section>
+
+          <section class="settings-page" data-page="appearance">
+            <div class="page-title"><div><h3>Appearance</h3><p>Control the full Studio surface: palette, glass, glow, and background composition.</p></div><button class="btn ghost small reset-section" data-section="appearance" type="button">RESET</button></div>
+            <div class="field-grid">
+              <label class="field"><span>Mode</span><select id="set-ui-mode"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+              <label class="field"><span>Theme</span><select id="set-theme"><option value="matrix">Matrix</option><option value="ember">Ember</option><option value="violet">Violet</option><option value="ice">Ice</option></select></label>
+              <label class="field"><span>Density</span><select id="set-density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+              <label class="field"><span>UI scale <output id="ui-scale-output">1.00</output></span><input id="set-ui-scale" type="range" min="0.75" max="1.4" step="0.05"></label>
+              <label class="field"><span>Chat scale <output id="chat-scale-output">1.00</output></span><input id="set-chat-scale" type="range" min="0.8" max="1.4" step="0.05"></label>
+              <label class="field"><span>Window width</span><input id="set-window-width" type="number" min="900" step="10"><small>Applied next launch.</small></label>
+              <label class="field"><span>Window height</span><input id="set-window-height" type="number" min="650" step="10"><small>Applied next launch.</small></label>
+            </div>
+
+            <div class="appearance-section">
+              <div class="subsection-title"><div><strong>COLOR SYSTEM</strong><span>Theme presets remain available; custom colors override them only when enabled.</span></div></div>
+              <div class="toggle-list compact-toggle"><label><span><strong>Custom colors</strong><small>Use your own palette instead of the preset color tokens.</small></span><input id="set-custom-colors" type="checkbox"></label></div>
+              <div class="field-grid gradient-controls">
+                <label class="field"><span>Interface gradients</span><select id="set-gradients"><option value="off">Off - flat surfaces</option><option value="on">On - layered surfaces</option></select><small>Gradients apply to interface surfaces only and never tint your background artwork.</small></label>
+                <label class="field"><span>Gradient strength <output id="gradient-strength-output">0.42</output></span><input id="set-gradient-strength" type="range" min="0" max="1" step="0.02"><small>Controls accent blending across panels, controls, cards, and chat bubbles.</small></label>
+              </div>
+              <div class="color-grid" id="custom-color-grid">
+                <label class="color-field"><span>Primary accent</span><input id="set-accent-color" type="color"><code id="accent-color-value">#66e2ba</code></label>
+                <label class="color-field"><span>Secondary accent</span><input id="set-accent-secondary" type="color"><code id="accent-secondary-value">#24d49a</code></label>
+                <label class="color-field"><span>Canvas / fallback (no image)</span><input id="set-background-color" type="color"><code id="background-color-value">#07100d</code></label>
+                <label class="color-field"><span>Panels</span><input id="set-panel-color" type="color"><code id="panel-color-value">#0a1215</code></label>
+                <label class="color-field"><span>Your messages</span><input id="set-user-bubble-color" type="color"><code id="user-bubble-color-value">#15302a</code></label>
+                <label class="color-field"><span>Model messages</span><input id="set-assistant-bubble-color" type="color"><code id="assistant-bubble-color-value">#111b22</code></label>
+                <label class="color-field"><span>Muted / metadata text</span><input id="set-muted-text-color" type="color"><code id="muted-text-color-value">#82969a</code></label>
+              </div>
+            </div>
+
+            <div class="appearance-section">
+              <div class="subsection-title"><div><strong>BACKGROUND</strong><span>Custom artwork stays sharp and aspect-correct. Optional blur fills only unused letterbox space.</span></div></div>
+              <div class="background-policy"><strong>Original proportions locked</strong><span>The main image is never stretched, cropped, blurred, or tinted. Edge fill is isolated to unused space and recalculates on resize.</span></div>
+              <div class="background-actions">
+                <input id="background-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                <button class="btn ghost" id="choose-background" type="button">CHOOSE IMAGE</button>
+                <button class="btn ghost" id="remove-background" type="button">REMOVE IMAGE</button>
+                <span id="background-status">No custom image</span>
+              </div>
+              <div class="field-grid visual-sliders">
+                <label class="field"><span>Image opacity <output id="background-opacity-output">0.62</output></span><input id="set-background-opacity" type="range" min="0" max="1" step="0.02"></label>
+                <label class="field"><span>Edge fill blur <output id="background-blur-output">16px</output></span><input id="set-background-blur" type="range" min="0" max="36" step="1"><small>Only fills unused letterbox space. Set to 0 for neutral black edges.</small></label>
+                <label class="field"><span>Darken / wash <output id="background-dim-output">0.42</output></span><input id="set-background-dim" type="range" min="0" max="0.95" step="0.01"></label>
+                <label class="field"><span>Panel opacity <output id="panel-opacity-output">0.88</output></span><input id="set-panel-opacity" type="range" min="0.45" max="1" step="0.01"></label>
+                <label class="field"><span>Panel glass blur <output id="panel-blur-output">18px</output></span><input id="set-panel-blur" type="range" min="0" max="32" step="1"></label>
+                <label class="field"><span>Accent glow <output id="glow-strength-output">0.32</output></span><input id="set-glow-strength" type="range" min="0" max="1" step="0.02"></label>
+              </div>
+            </div>
+
+            <div class="toggle-list"><label><span><strong>Reduce motion</strong><small>Suppress nonessential transitions and ambient movement.</small></span><input id="set-reduce-motion" type="checkbox"></label></div>
+          </section>
+
+          <section class="settings-page" data-page="data">
+            <div class="page-title"><div><h3>Import / Export</h3><p>Move the clean Studio state between copies without carrying old Matrix Studio code.</p></div></div>
+            <div class="transfer-grid">
+              <div class="transfer-card"><span class="transfer-icon">⇩</span><div><strong>Export workspace</strong><p>Creates one portable JSON bundle containing settings, chats, reasoning history, and your custom background image when present.</p></div><button class="btn primary" id="export-workspace" type="button">EXPORT WORKSPACE</button></div>
+              <div class="transfer-card"><span class="transfer-icon">⇧</span><div><strong>Import workspace or chat</strong><p>Imports a MatrixStudio2.0 workspace bundle or a single chat export. Existing chats are preserved; imported chats receive new IDs.</p></div><input id="import-workspace-file" type="file" accept="application/json,.json" hidden><button class="btn ghost" id="import-workspace" type="button">IMPORT JSON</button></div>
+            </div>
+            <div class="transfer-grid theme-transfer-grid">
+              <div class="transfer-card"><span class="transfer-icon">◈</span><div><strong>Export theme profile</strong><p>Saves appearance, density, gradients, colors, and background controls without chats or runtime settings.</p></div><button class="btn ghost" id="export-theme" type="button">EXPORT THEME</button></div>
+              <div class="transfer-card"><span class="transfer-icon">◇</span><div><strong>Import theme profile</strong><p>Applies only appearance settings. Your conversations, model, runtime, and chat behavior stay untouched.</p></div><input id="import-theme-file" type="file" accept="application/json,.json" hidden><button class="btn ghost" id="import-theme" type="button">IMPORT THEME</button></div>
+            </div>
+            <div class="import-note" id="import-status">Import is additive and never deletes your current conversations.</div>
+          </section>
+
+          <section class="settings-page" data-page="advanced">
+            <div class="page-title"><div><h3>Reset / Advanced</h3><p>Reset only the subsystem you intend to change. Conversations and local models are never removed by these controls.</p></div></div>
+            <div class="reset-grid">
+              <button class="reset-card reset-section" data-section="runtime" type="button"><strong>Runtime</strong><span>Model selection, context, keep-alive, reply token limit.</span></button>
+              <button class="reset-card reset-section" data-section="chat" type="button"><strong>Chat</strong><span>Temperature, history, base prompt, metadata and session behavior.</span></button>
+              <button class="reset-card reset-section" data-section="voice" type="button"><strong>Voice</strong><span>Provider, privacy gate, playback behavior, voices, and speech limits.</span></button>
+              <button class="reset-card reset-section" data-section="reasoning" type="button"><strong>Reasoning</strong><span>Reasoning mode and Model Think visibility.</span></button>
+              <button class="reset-card reset-section" data-section="appearance" type="button"><strong>Appearance</strong><span>Theme, scaling, background, colors, gradients and motion.</span></button>
+              <button class="reset-card reset-section" data-section="specialists" type="button"><strong>Specialist selection</strong><span>Return manual specialist mode to the base assistant.</span></button>
+            </div>
+
+            <div class="maintenance-card">
+              <div class="maintenance-mark" aria-hidden="true">M<sup>2</sup></div>
+              <div><strong>CYPRA CLEAN · SYSTEM MAINTENANCE</strong><span>Launch the bundled Windows space-recovery utility in an elevated terminal. Cleanup remains manual and visible.</span></div>
+              <button class="btn ghost" id="launch-cleaner" type="button">OPEN CLEANER</button>
+            </div>
+            <div class="danger-zone">
+              <div><strong>Reset program state</strong><span>Resets all settings and remembered UI state. Chats and local Ollama models are kept.</span></div>
+              <button class="btn danger" id="reset-program-state" type="button">RESET PROGRAM STATE</button>
+            </div>
+          </section>
+
+          <section class="settings-page" data-page="about">
+            <div class="page-title"><div><h3>Clean foundation</h3><p>MatrixStudio2.0 is intentionally smaller than Matrix Studio 1.x.</p></div></div>
+            <div class="about-grid">
+              <div class="about-block"><strong>INCLUDED</strong><p>Portable launcher, private Ollama runtime, local model store, streaming chat, quiet local retrieval, persistent sessions, guarded voice output, model controls, and UI settings.</p></div>
+              <div class="about-block"><strong>MANUAL SPECIALISTS</strong><p>700 legacy Matrix specialists are available only through the Specialists button. There is no automatic agent routing and no extra agent inference pipeline.</p></div>
+              <div class="about-block"><strong>BUILD</strong><p id="build-id">—</p></div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div class="settings-foot"><span id="settings-status">No unsaved changes</span><div><button class="btn ghost" id="reset-all" type="button" title="Open the Reset / Advanced section.">RESET OPTIONS</button><button class="btn primary" id="save-settings" type="button">SAVE SETTINGS</button></div></div>
+    </form>
+  </dialog>
+
+  <div class="shutdown-overlay" id="shutdown-overlay" role="status" aria-live="assertive" aria-hidden="true" hidden>
+    <div class="shutdown-panel">
+      <div class="shutdown-mark"><span>M</span><sup>2</sup></div>
+      <div class="shutdown-copy"><strong>SHUTTING DOWN</strong><span id="shutdown-status">Saving workspace state…</span></div>
+      <div class="shutdown-line" aria-hidden="true"><i></i></div>
+    </div>
+  </div>
+
+  <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
+
+  <script src="/static/js/app.js?v=edge-voices-2316"></script>
+</body>
+</html>

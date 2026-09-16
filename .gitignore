@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+data/*.log
+data/*.ready
+data/*.tmp
+OllamaModels/*
+!OllamaModels/.gitkeep
+Setup/Python312/
+data/settings.json
+data/settings.lastgood.json
+data/ui_state.json
+
+data/retrieval/
