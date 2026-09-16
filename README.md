@@ -22,8 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.17-edge-expression-20260916`
-> Main Chat: `Future additions will be added...`
+> Current build: `2.3.18-edge-expression-fast-20260916`
 
 ## Features
 
@@ -87,8 +86,8 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
 - Provider-aware controls that swap between Browser, Edge, Piper, and Off.
 - Voice preview, stop/cancel, auto-speak, and per-response **SPEAK**.
 - Configurable rate, pitch, volume, maximum spoken characters, and Edge failure fallback.
-- Edge expression presets: Neutral, Calm, Friendly, Cheerful, Serious, Sad, Angry, Dramatic, Narrator, and local deterministic Auto tone.
-- Adjustable tone intensity plus Off / Natural / Expressive pause styles with bounded `[pause:NNN]` markers and real client-side playback gaps.
+- Edge expression presets: Neutral, Calm, Friendly, Cheerful, Serious, Sad, Angry, Dramatic, Narrator, and local deterministic Auto tone with stronger bounded prosody for clearer audible differences.
+- Adjustable tone intensity plus Off / Natural / Expressive pause styles. Normal punctuation stays in one fast Edge synthesis request; Expressive shapes punctuation for stronger delivery, while bounded `[pause:NNN]` markers provide explicit client-side gaps when exact pauses are needed.
 - Optional skipping of URLs and code blocks.
 - Bounded synthesis queue and sanitization before online Edge synthesis.
 

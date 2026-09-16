@@ -24,41 +24,21 @@ TTS_PAUSE_STYLES = ("off", "natural", "expressive")
 
 # rate %, pitch Hz, volume %
 _TONE_DELTAS: dict[str, tuple[int, int, int]] = {
+    # Deliberately stronger than the first expression pass. Edge's free
+    # endpoint does not expose native emotional styles, so tiny prosody
+    # offsets were effectively inaudible on many voices.
     "neutral": (0, 0, 0),
-    "calm": (-8, -4, -2),
-    "friendly": (2, 3, 0),
-    "cheerful": (8, 8, 4),
-    "serious": (-4, -5, 1),
-    "sad": (-10, -10, -4),
-    "angry": (10, 4, 8),
-    "dramatic": (-4, -2, 5),
-    "narrator": (-6, -3, 2),
+    "calm": (-14, -9, -4),
+    "friendly": (7, 7, 2),
+    "cheerful": (16, 18, 8),
+    "serious": (-9, -12, 4),
+    "sad": (-18, -18, -8),
+    "angry": (18, 11, 12),
+    "dramatic": (-12, -11, 11),
+    "narrator": (-10, -7, 5),
 }
 
 _MANUAL_PAUSE = re.compile(r"\[pause\s*:\s*(\d{1,5})\s*\]", re.IGNORECASE)
-_BOUNDARY = re.compile(r"\[pause\s*:\s*\d{1,5}\s*\]|\n+|\.{3,}|[.!?]+|[,:;]|[—–]", re.IGNORECASE)
-
-_PAUSES = {
-    "natural": {
-        "comma": 90,
-        "semicolon": 140,
-        "dash": 180,
-        "sentence": 220,
-        "ellipsis": 360,
-        "line": 280,
-        "paragraph": 480,
-    },
-    "expressive": {
-        "comma": 150,
-        "semicolon": 220,
-        "dash": 320,
-        "sentence": 340,
-        "ellipsis": 550,
-        "line": 420,
-        "paragraph": 700,
-    },
-}
-
 
 def normalize_tone(value: object) -> str:
     candidate = str(value or "neutral").strip().lower()
@@ -138,25 +118,34 @@ def resolve_edge_prosody(
     }
 
 
-def _pause_kind(token: str) -> str:
-    if token.startswith("\n"):
-        return "paragraph" if token.count("\n") >= 2 else "line"
-    if token.startswith("..."):
-        return "ellipsis"
-    if token in ("—", "–"):
-        return "dash"
-    if token in (",",):
-        return "comma"
-    if token in (";", ":"):
-        return "semicolon"
-    return "sentence"
+def _shape_pause_cues(text: str, style: str) -> str:
+    """Strengthen punctuation without creating another Edge network request.
+
+    Edge already interprets punctuation prosodically. Expressive mode adds
+    non-spoken ellipsis cues after stronger boundaries so pauses are more
+    noticeable while synthesis remains a single request for ordinary text.
+    """
+    value = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not value or style != "expressive":
+        return value
+
+    # Normalize existing ASCII ellipses first so we do not repeatedly amplify
+    # text when a plan is rebuilt. The Unicode ellipsis is retained by the
+    # speech sanitizers and interpreted as punctuation by Edge.
+    value = re.sub(r"\.{3,}", "…", value)
+    value = re.sub(r"([.!?])\s+(?=[A-Z0-9\"'\(])", r"\1 … ", value)
+    value = re.sub(r"([;:])\s+", r"\1 … ", value)
+    value = re.sub(r"\s*[—–]\s*", " — … ", value)
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def build_speech_plan(text: str, *, style: object = "natural", maximum_segments: int = 24) -> list[dict[str, object]]:
-    """Split speech into bounded client-playback segments with real pause delays.
+    """Build a bounded speech plan without multiplying Edge round-trips.
 
-    Manual ``[pause:NNN]`` markers are always honored and capped to 2000 ms.
-    Automatic punctuation pauses are disabled when style is ``off``.
+    Natural and expressive punctuation stay inside one synthesis request. Only
+    explicit ``[pause:NNN]`` markers create additional requests because they
+    require a deterministic client-side silence duration. Manual pauses remain
+    capped to 2000 ms.
     """
     value = str(text or "").replace("\x00", " ").strip()
     if not value:
@@ -164,52 +153,33 @@ def build_speech_plan(text: str, *, style: object = "natural", maximum_segments:
     pause_style = normalize_pause_style(style)
     maximum_segments = max(1, min(48, int(maximum_segments or 24)))
 
-    if pause_style == "off" and not _MANUAL_PAUSE.search(value):
-        clean = re.sub(r"\s+", " ", value).strip()
-        return [{"text": clean, "pause_after_ms": 0}] if clean else []
+    matches = list(_MANUAL_PAUSE.finditer(value))
+    if not matches:
+        shaped = _shape_pause_cues(value, pause_style)
+        return [{"text": shaped, "pause_after_ms": 0}] if shaped else []
 
     plan: list[dict[str, object]] = []
-    current = ""
     pos = 0
-
-    def flush(pause_ms: int) -> None:
-        nonlocal current
-        spoken = re.sub(r"\s+", " ", current).strip()
-        current = ""
+    for match in matches:
+        spoken = _shape_pause_cues(value[pos:match.start()], pause_style)
+        pause_ms = min(2000, int(match.group(1)))
         if spoken:
-            plan.append({"text": spoken, "pause_after_ms": max(0, min(2000, int(pause_ms)))})
-        elif plan and pause_ms:
-            plan[-1]["pause_after_ms"] = max(int(plan[-1]["pause_after_ms"]), max(0, min(2000, int(pause_ms))))
-
-    for match in _BOUNDARY.finditer(value):
-        current += value[pos:match.start()]
-        token = match.group(0)
-        manual = _MANUAL_PAUSE.fullmatch(token)
-        if manual:
-            flush(min(2000, int(manual.group(1))))
-        elif token.startswith("\n"):
-            if pause_style == "off":
-                current += " "
-            else:
-                flush(_PAUSES[pause_style][_pause_kind(token)])
-        else:
-            current += token
-            if pause_style != "off":
-                kind = _pause_kind(token)
-                # Avoid turning every tiny comma fragment into a network call.
-                if kind not in {"comma", "semicolon"} or len(current.strip()) >= 24:
-                    flush(_PAUSES[pause_style][kind])
+            plan.append({"text": spoken, "pause_after_ms": pause_ms})
+        elif plan:
+            plan[-1]["pause_after_ms"] = max(int(plan[-1]["pause_after_ms"]), pause_ms)
         pos = match.end()
 
-    current += value[pos:]
-    flush(0)
+    tail = _shape_pause_cues(value[pos:], pause_style)
+    if tail:
+        plan.append({"text": tail, "pause_after_ms": 0})
+
     if not plan:
         return []
-
     if len(plan) > maximum_segments:
         head = plan[: maximum_segments - 1]
-        tail = plan[maximum_segments - 1 :]
-        merged_text = " ".join(str(item["text"]).strip() for item in tail if str(item["text"]).strip())
-        head.append({"text": merged_text, "pause_after_ms": int(tail[-1]["pause_after_ms"]) if tail else 0})
+        tail_items = plan[maximum_segments - 1 :]
+        merged_text = " ".join(str(item["text"]).strip() for item in tail_items if str(item["text"]).strip())
+        head.append({"text": merged_text, "pause_after_ms": int(tail_items[-1]["pause_after_ms"]) if tail_items else 0})
         plan = head
     return plan
+
