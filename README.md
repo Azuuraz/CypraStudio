@@ -22,7 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.16-edge-voice-switch-20260916`
+> Main Chat: `Future additions will be added...`
 
 ## Features
 
