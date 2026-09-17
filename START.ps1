@@ -192,11 +192,18 @@ function Prepare-Python {
         -not (Test-Path -LiteralPath $SetupPython) -and (Test-Path -LiteralPath $offlinePythonInstaller)) {
         Step "01" "Installing bundled Python 3.12 for offline packages"
         try {
-            $installer = Start-Process -FilePath $offlinePythonInstaller -ArgumentList @('/quiet','InstallAllUsers=0','Include_launcher=0','Include_pip=1','PrependPath=0','Include_test=0') -Wait -PassThru -WindowStyle Hidden
+            $installer = Start-Process -FilePath $offlinePythonInstaller -ArgumentList @('/quiet',("TargetDir=" + $SetupDir + '\Python312'),'InstallAllUsers=0','Include_launcher=0','Include_pip=1','PrependPath=0','Include_test=0') -Wait -PassThru -WindowStyle Hidden
         } catch { $installer = $null }
         if ($installer -and $installer.ExitCode -eq 0 -and (Test-Path -LiteralPath $SetupPython)) {
             Log-Launch "Bundled Python 3.12 installed for offline package compatibility"
         }
+    }
+    # Python's per-user installer can ignore TargetDir on locked-down Windows
+    # profiles. Accept its documented default location as the same bundled
+    # offline interpreter rather than falling through to Python 3.14.
+    if (-not (Test-Path -LiteralPath $SetupPython)) {
+        $userPython312 = Join-Path $env:LocalAppData 'Programs\Python\Python312\python.exe'
+        if (Test-Path -LiteralPath $userPython312) { $script:SetupPython = $userPython312 }
     }
     $base = Find-Python
     if (-not $base) { Fail "Python 3.11-3.14 not found. Add Setup\Python312 or install a supported Python." }
