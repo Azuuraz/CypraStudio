@@ -376,11 +376,13 @@
 
   async function refreshSTTStatus() {
     const el = $('#stt-status');
+    const progress = $('#stt-progress');
     if (!el) return null;
     try {
       const status = await api('/api/stt/status');
       const local = status.local || {};
       const phase = String(local.prepare_state || '').toLowerCase();
+      if (progress) { progress.hidden = !(local.preparing || phase === 'ready'); progress.classList.toggle('ready', phase === 'ready'); progress.classList.toggle('error', phase === 'error'); }
       if (local.model_ready) el.textContent = `Local STT ready · ${status.local_model || local.model || 'base.en'} · CPU int8`;
       else if (['queued','installing','downloading','loading'].includes(phase)) el.textContent = sttPrepareMessage(local);
       else if (phase === 'error') el.textContent = `${local.last_error || local.prepare_message || 'Local STT preparation failed'} · see MatrixFiles/Voice/STT/prepare.log`;
@@ -778,6 +780,8 @@
     const button = $('#prepare-local-stt');
     if (button) { button.disabled = true; button.textContent = 'PREPARING…'; }
     const status = $('#stt-status');
+    const progress = $('#stt-progress');
+    if (progress) { progress.hidden = false; progress.classList.remove('ready','error'); }
     if (status) status.textContent = 'Starting local STT preparation…';
     try {
       const snapshot = collectSettings();
@@ -785,11 +789,13 @@
       await sttRequest('/api/stt/prepare', {method:'POST'});
       const result = await pollLocalSTTPreparation({onStatus: current => {
         if (status) status.textContent = sttPrepareMessage(current.local || {});
+        if (progress) { progress.hidden = false; progress.classList.remove('ready','error'); }
       }});
       if (status) status.textContent = `Local STT ready · ${result.local?.model || state.settings.stt_local_model || 'base.en'} · CPU int8`;
     } catch (error) {
       const message = error.message || 'Local STT preparation failed';
       if (status) status.textContent = `${message} · see MatrixFiles/Voice/STT/prepare.log`;
+      if (progress) { progress.hidden = false; progress.classList.add('error'); }
       showToast(message, {title:'Voice', tone:'danger', duration:6000});
     } finally {
       if (button) { button.disabled = false; button.textContent = 'PREPARE LOCAL STT'; }

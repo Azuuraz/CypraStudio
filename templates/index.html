@@ -305,7 +305,7 @@
             </div>
             <div class="settings-note"><strong>Privacy boundary.</strong><span>Piper stays local and CPU-only. The browser/device provider makes no MatrixStudio Edge request, though the operating system/browser controls how its installed speech voices are implemented. Edge is never contacted unless Allow online Edge TTS is enabled; outgoing text is sanitized again on the backend before synthesis.</span></div>
             <div class="background-actions"><button class="btn primary" id="voice-preview" type="button">PREVIEW VOICE</button><button class="btn ghost" id="voice-stop" type="button">STOP VOICE</button><span id="tts-status">Voice output is off</span></div>
-            <div class="background-actions"><button class="btn ghost" id="prepare-local-stt" type="button">PREPARE LOCAL STT</button><span id="stt-status">Local STT not checked</span></div>
+            <div class="background-actions stt-prepare-actions"><button class="btn ghost" id="prepare-local-stt" type="button">PREPARE LOCAL STT</button><span id="stt-status">Local STT not checked</span><div class="stt-progress" id="stt-progress" hidden><span></span></div></div>
           </section>
 
           <section class="settings-page" data-page="reasoning">
@@ -435,6 +435,6 @@
 
   <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
 
-  <script src="/static/js/app.js?v=live-mute-resume-2322"></script>
+  <script src="/static/js/app.js?v=stt-progress-2322"></script>
 </body>
 </html>
