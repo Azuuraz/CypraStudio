@@ -40,27 +40,40 @@ class EdgeEngine:
         except ImportError as exc:
             raise EdgeUnavailable("edge-tts is not installed") from exc
 
-        communicator = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume)
-        output = io.BytesIO()
-        try:
-            async with asyncio.timeout(timeout):
-                async for chunk in communicator.stream():
-                    if cancelled():
-                        raise asyncio.CancelledError
-                    if chunk.get("type") != "audio":
-                        continue
-                    data = chunk.get("data")
-                    if not isinstance(data, bytes):
-                        raise EdgeUnavailable("Edge returned malformed audio")
-                    if output.tell() + len(data) > self.MAX_AUDIO_BYTES:
-                        raise EdgeUnavailable("Edge audio exceeded the bounded buffer")
-                    output.write(data)
-        except asyncio.TimeoutError as exc:
-            raise EdgeUnavailable("Edge synthesis timed out") from exc
-        audio = output.getvalue()
-        if len(audio) < 32:
-            raise EdgeUnavailable("Edge returned no usable audio")
-        return audio
+        last_error = None
+        for attempt in range(2):
+            if cancelled():
+                raise asyncio.CancelledError
+            communicator = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume)
+            output = io.BytesIO()
+            try:
+                async with asyncio.timeout(timeout):
+                    async for chunk in communicator.stream():
+                        if cancelled():
+                            raise asyncio.CancelledError
+                        if chunk.get("type") != "audio":
+                            continue
+                        data = chunk.get("data")
+                        if not isinstance(data, bytes):
+                            raise EdgeUnavailable("Edge returned malformed audio")
+                        if output.tell() + len(data) > self.MAX_AUDIO_BYTES:
+                            raise EdgeUnavailable("Edge audio exceeded the bounded buffer")
+                        output.write(data)
+                audio = output.getvalue()
+                if len(audio) < 32:
+                    raise EdgeUnavailable("Edge returned no usable audio")
+                return audio
+            except asyncio.CancelledError:
+                raise
+            except asyncio.TimeoutError as exc:
+                last_error = EdgeUnavailable("Edge synthesis timed out")
+            except EdgeUnavailable as exc:
+                last_error = exc
+            except Exception as exc:
+                last_error = EdgeUnavailable("Edge connection failed")
+            if attempt == 0:
+                await asyncio.sleep(0.25)
+        raise last_error or EdgeUnavailable("Edge synthesis failed")
 
     @staticmethod
     async def list_voices(timeout: float = 15.0) -> list[dict]:
