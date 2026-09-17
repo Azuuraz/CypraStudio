@@ -216,7 +216,7 @@
     });
   }
 
-  async function fetchServerSpeechBlob(text, {configured, voiceId, expression, preview=false}) {
+  async function fetchServerSpeechBlob(text, {configured, voiceId, expression, preview=false, allowBrowserFallback=true}) {
     const controller = new AbortController();
     state.ttsAbort = controller;
     try {
@@ -231,7 +231,7 @@
       if (!response.ok) {
         let payload = {}; try { payload = await response.json(); } catch {}
         const detail = payload?.detail;
-        if (detail?.error === 'browser_tts') return {browserFallback:true, text};
+        if (detail?.error === 'browser_tts' && allowBrowserFallback) return {browserFallback:true, text};
         const message = typeof detail === 'string' ? detail : (detail?.message || `Voice synthesis failed (${response.status})`);
         throw new Error(message);
       }
@@ -245,7 +245,7 @@
     // Resolve failures into a value while current audio is playing. That avoids
     // an unhandled-rejection race if the prefetched request fails early; the
     // main playback loop raises the error when it reaches that chunk.
-    return fetchServerSpeechBlob(text, {...options, configured:'edge'}).then(
+    return fetchServerSpeechBlob(text, {...options, configured:'edge', allowBrowserFallback:false}).then(
       result => ({result}),
       error => ({error})
     );
@@ -297,6 +297,16 @@
       const voiceId = configured === 'edge' ? (state.settings.tts_edge_voice || $('#set-tts-edge-voice')?.value || 'en-US-AvaNeural') : (state.settings.tts_local_voice || 'en_US-lessac-medium');
 
       if (configured === 'edge') {
+        // Fixed-tone short replies do not need a planning round trip. The
+        // expression controls still go directly to Edge, preserving emotion;
+        // auto tone and expressive pause shaping stay on the planner path.
+        const directEdge = clean.length <= 1400 && expression.tone !== 'auto' && expression.pause_style !== 'expressive';
+        if (directEdge) {
+          if ($('#tts-status')) $('#tts-status').textContent = `Edge · ${expression.tone.toUpperCase()}`;
+          const result = await requestServerSpeech(clean, {configured:'edge', voiceId, expression, token, preview});
+          if (result?.browserFallback) await speakBrowser(clean, token);
+          return;
+        }
         if ($('#tts-status')) $('#tts-status').textContent = 'Planning expressive Edge speech…';
         state.ttsAbort = new AbortController();
         const planResponse = await fetch('/api/tts/plan', {
