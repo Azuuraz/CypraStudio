@@ -225,10 +225,6 @@ CypraStudio is local-first, not universally offline. Normal Ollama chat, local r
 
 Edge TTS has its own explicit privacy gate. Do not enable it for text you do not want sent to Microsoft’s speech service.
 
-## Scope
-
-This branch intentionally does **not** restore the retired Brain/visual-graph RAG system, Finance workspace, Code Swarm, hidden legacy pages, autonomous Work/tasks system, or old realtime/STT voice workspace. Retrieval is quiet and lexical, Specialists are manually selected, and voice output is isolated from memory and agent routing.
-
 ## License
 
 CypraStudio is released under the [MIT License](LICENSE).
