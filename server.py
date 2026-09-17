@@ -1018,7 +1018,9 @@ def tts_synthesize(body: TTSRequest) -> Response:
             skip_urls=bool(settings.get("tts_skip_urls", True)),
             replace=bool(settings.get("tts_stop_previous", True) if body.replace is None else body.replace),
             online_allowed=bool(requested == "edge" and settings.get("tts_allow_online")),
-            fallback="piper" if fallback == "piper" else "none",
+            # Edge responses must remain Edge for the whole utterance. The
+            # client handles an explicit failure instead of changing voices.
+            fallback="none" if requested == "edge" else ("piper" if fallback == "piper" else "none"),
             fallback_voice=normalize_piper_voice(settings.get("tts_local_voice")),
         )
     except TTSCancelled as exc:

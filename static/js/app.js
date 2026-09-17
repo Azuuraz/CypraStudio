@@ -235,6 +235,9 @@
         const message = typeof detail === 'string' ? detail : (detail?.message || `Voice synthesis failed (${response.status})`);
         throw new Error(message);
       }
+      if (configured === 'edge' && response.headers.get('X-TTS-Provider') !== 'edge') {
+        throw new Error('Edge returned audio from another provider; response stopped to preserve Edge voice continuity.');
+      }
       return {blob:await response.blob(), text};
     } finally {
       if (state.ttsAbort === controller) state.ttsAbort = null;
@@ -303,7 +306,7 @@
         const directEdge = clean.length <= 1400 && expression.tone !== 'auto' && expression.pause_style !== 'expressive';
         if (directEdge) {
           if ($('#tts-status')) $('#tts-status').textContent = `Edge · ${expression.tone.toUpperCase()}`;
-          const result = await requestServerSpeech(clean, {configured:'edge', voiceId, expression, token, preview});
+          const result = await requestServerSpeech(clean, {configured:'edge', voiceId, expression, token, preview, allowBrowserFallback:false});
           if (result?.browserFallback) await speakBrowser(clean, token);
           return;
         }
