@@ -66,7 +66,7 @@ def security_headers(path: str = "") -> dict[str, str]:
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "no-referrer",
         "Cross-Origin-Resource-Policy": "same-origin",
-        "Permissions-Policy": "camera=(), geolocation=(), microphone=()",
+        "Permissions-Policy": "camera=(), geolocation=(), microphone=(self)",
         "Content-Security-Policy": (
             "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; "
             "form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "

@@ -2211,3 +2211,15 @@ body.shutdown-in-progress .app-shell{visibility:hidden!important;filter:none!imp
 .ambient-beam{opacity:.34;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 33%,transparent),transparent)}
 body.background-image-active .ambient-fx{opacity:.94}
 @media(max-width:840px){.maintenance-card{grid-template-columns:42px minmax(0,1fr)}.maintenance-card .btn{grid-column:1/-1;justify-self:start;margin-left:55px}}
+
+
+/* Live voice call ---------------------------------------------------------- */
+#live-call,#live-call-mute,#stop-voice-main{white-space:nowrap}
+#live-call-state{color:var(--accent);font-weight:850;letter-spacing:.07em}
+#live-call:not([hidden]){border-color:color-mix(in srgb,var(--accent) 52%,var(--line));color:var(--text)}
+@media(max-width:840px){
+  #live-call,#stop-voice-main{display:inline-flex;align-items:center;justify-content:center}
+  #live-call-mute{display:none}
+  .composer-actions{gap:4px}
+  #live-call,#stop-voice-main{padding:0 8px;font-size:.54rem}
+}

@@ -6,7 +6,8 @@
     abort: null, dirty: false, pullTimer: null, runtimeWatchTimer: null, search: '', uiStateTimer: null, sessionViewTimer: null, settingsSaveTimer: null, settingsSaveSeq: 0, lastRenderedSessionId: '', lastChatSessionId: '', commandIndex: 0, sessionMenu: null, toastTimer: null,
     specialistGroups: [], specialistAgents: [], specialistGroup: '', selectedSpecialist: null, generationPhase: 'ready', controlMenu: null, heroExitActive: false,
     hfRepo: null, hfGroups: [], hfSelectedGroup: '', hfPollTimer: null, shutdownActive: false,
-    ttsAbort: null, ttsAudio: null, ttsAudioUrl: '', ttsToken: 0, ttsPlaying: false, edgeVoicesLoaded: false, edgeVoicesLoading: false
+    ttsAbort: null, ttsAudio: null, ttsAudioUrl: '', ttsToken: 0, ttsPlaying: false, edgeVoicesLoaded: false, edgeVoicesLoading: false,
+    liveCall: {active:false, muted:false, state:'IDLE', mode:'local', stream:null, audioContext:null, analyser:null, source:null, vadTimer:null, recorder:null, chunks:[], recorderDiscard:false, speechHeard:false, lastVoiceAt:0, recordingStartedAt:0, browserRecognition:null, browserRestartTimer:null, processing:false, generation:0, speakerStartedAt:0, bargeFrames:0}
   };
 
   async function api(path, opts = {}) {
@@ -21,6 +22,7 @@
 
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const COMPACT_LAYOUT_WIDTH = 1040;
+  const TTS_HARD_CEILING = 50000;
 
   let backgroundResizeTimer = 0;
   const backgroundAsset = {url:'', width:0, height:0, token:0};
@@ -119,6 +121,12 @@
 
 
 
+  function syncVoiceStopButton() {
+    const button = $('#stop-voice-main');
+    if (!button) return;
+    button.hidden = !(state.ttsPlaying || state.ttsAbort || state.liveCall?.state === 'SPEAKING');
+  }
+
   function sanitizeBrowserSpeech(text) {
     let value = String(text || '');
     if (state.settings.tts_skip_code !== false) value = value.replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, ' Code block omitted. ');
@@ -132,7 +140,7 @@
       .replace(/[ \t]+/g, ' ')
       .trim();
     const rawMaximum = Number(state.settings.tts_max_chars);
-    const maximum = Number.isFinite(rawMaximum) ? clamp(rawMaximum, 100, 10000) : 1200;
+    const maximum = Number.isFinite(rawMaximum) ? clamp(rawMaximum, 100, TTS_HARD_CEILING) : TTS_HARD_CEILING;
     if (value.length <= maximum) return value;
     const clipped = value.slice(0, maximum).trimEnd();
     const boundary = Math.max(clipped.lastIndexOf('. '), clipped.lastIndexOf('! '), clipped.lastIndexOf('? '));
@@ -150,6 +158,7 @@
     }
     if (state.ttsAudioUrl) { try { URL.revokeObjectURL(state.ttsAudioUrl); } catch {} state.ttsAudioUrl = ''; }
     if ($('#tts-status')) $('#tts-status').textContent = state.settings.voice_output_enabled ? 'Voice ready' : 'Voice output is off';
+    syncVoiceStopButton();
     if (notifyBackend) {
       fetch('/api/tts/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({release:!!release})}).catch(()=>{});
     }
@@ -172,7 +181,7 @@
       } catch {}
       utter.onend = () => { if (token === state.ttsToken) state.ttsPlaying = false; if ($('#tts-status')) $('#tts-status').textContent = 'Voice ready'; resolve(); };
       utter.onerror = event => { if (token === state.ttsToken) state.ttsPlaying = false; reject(new Error(event?.error || 'Device speech failed')); };
-      state.ttsPlaying = true;
+      state.ttsPlaying = true; syncVoiceStopButton();
       if ($('#tts-status')) $('#tts-status').textContent = 'Speaking with device voice…';
       speechSynthesis.cancel();
       speechSynthesis.speak(utter);
@@ -207,12 +216,46 @@
     });
   }
 
-  async function playVoiceResponse(response, token, providerLabel) {
-    const blob = await response.blob();
-    if (token !== state.ttsToken) return false;
+  async function fetchServerSpeechBlob(text, {configured, voiceId, expression, preview=false}) {
+    const controller = new AbortController();
+    state.ttsAbort = controller;
+    try {
+      const response = await fetch('/api/tts', {
+        method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal,
+        body:JSON.stringify({
+          text, voice_id:voiceId, provider:configured, replace:false, preview:!!preview,
+          rate:expression.rate, pitch:expression.pitch, volume:expression.volume,
+          tone:expression.tone, intensity:expression.intensity
+        })
+      });
+      if (!response.ok) {
+        let payload = {}; try { payload = await response.json(); } catch {}
+        const detail = payload?.detail;
+        if (detail?.error === 'browser_tts') return {browserFallback:true, text};
+        const message = typeof detail === 'string' ? detail : (detail?.message || `Voice synthesis failed (${response.status})`);
+        throw new Error(message);
+      }
+      return {blob:await response.blob(), text};
+    } finally {
+      if (state.ttsAbort === controller) state.ttsAbort = null;
+    }
+  }
+
+  function prefetchEdgeSegment(text, options) {
+    // Resolve failures into a value while current audio is playing. That avoids
+    // an unhandled-rejection race if the prefetched request fails early; the
+    // main playback loop raises the error when it reaches that chunk.
+    return fetchServerSpeechBlob(text, {...options, configured:'edge'}).then(
+      result => ({result}),
+      error => ({error})
+    );
+  }
+
+  async function playVoiceBlob(blob, token, providerLabel) {
+    if (token !== state.ttsToken || !blob) return false;
     if (state.ttsAudioUrl) { try { URL.revokeObjectURL(state.ttsAudioUrl); } catch {} state.ttsAudioUrl = ''; }
     const url = URL.createObjectURL(blob); state.ttsAudioUrl = url;
-    const audio = new Audio(url); state.ttsAudio = audio; state.ttsPlaying = true;
+    const audio = new Audio(url); state.ttsAudio = audio; state.ttsPlaying = true; syncVoiceStopButton();
     if ($('#tts-status')) $('#tts-status').textContent = `Speaking with ${providerLabel}…`;
     await new Promise((resolve, reject) => {
       audio.onended = () => resolve();
@@ -225,24 +268,9 @@
   }
 
   async function requestServerSpeech(text, {configured, voiceId, expression, token, preview=false}) {
-    state.ttsAbort = new AbortController();
-    const response = await fetch('/api/tts', {
-      method:'POST', headers:{'Content-Type':'application/json'}, signal:state.ttsAbort.signal,
-      body:JSON.stringify({
-        text, voice_id:voiceId, provider:configured, replace:false, preview:!!preview,
-        rate:expression.rate, pitch:expression.pitch, volume:expression.volume,
-        tone:expression.tone, intensity:expression.intensity
-      })
-    });
-    state.ttsAbort = null;
-    if (!response.ok) {
-      let payload = {}; try { payload = await response.json(); } catch {}
-      const detail = payload?.detail;
-      if (detail?.error === 'browser_tts') return {browserFallback:true};
-      const message = typeof detail === 'string' ? detail : (detail?.message || `Voice synthesis failed (${response.status})`);
-      throw new Error(message);
-    }
-    const played = await playVoiceResponse(response, token, configured === 'edge' ? 'Edge' : 'Piper');
+    const prepared = await fetchServerSpeechBlob(text, {configured, voiceId, expression, preview});
+    if (prepared?.browserFallback) return prepared;
+    const played = await playVoiceBlob(prepared.blob, token, configured === 'edge' ? 'Edge' : 'Piper');
     return {played};
   }
 
@@ -260,6 +288,7 @@
       }
     }
     const token = ++state.ttsToken;
+    state.ttsPlaying = true; syncVoiceStopButton();
     const originalLabel = button?.textContent || '';
     if (button) { button.disabled = true; button.textContent = 'VOICE…'; }
     try {
@@ -285,12 +314,28 @@
         expression.tone = String(plan.tone || expression.tone);
         expression.intensity = clamp(Number(plan.intensity ?? expression.intensity), 0, 1);
         if ($('#tts-status')) $('#tts-status').textContent = `Edge · ${expression.tone.toUpperCase()} · ${plan.segments.length} segment${plan.segments.length === 1 ? '' : 's'}`;
-        for (const segment of plan.segments) {
+        const speechSegments = plan.segments
+          .map(segment => ({...segment, text:String(segment?.text || '').trim()}))
+          .filter(segment => !!segment.text);
+        if (!speechSegments.length) throw new Error('Edge speech plan returned no speakable segments');
+
+        let pendingSpeech = prefetchEdgeSegment(speechSegments[0].text, {voiceId, expression, preview});
+        for (let index = 0; index < speechSegments.length; index += 1) {
           if (token !== state.ttsToken) return;
-          const segmentText = String(segment?.text || '').trim();
-          if (!segmentText) continue;
-          const result = await requestServerSpeech(segmentText, {configured:'edge', voiceId, expression, token, preview});
-          if (result?.browserFallback) await speakBrowser(segmentText, token);
+          const segment = speechSegments[index];
+          const prefetched = await pendingSpeech;
+          if (prefetched?.error) throw prefetched.error;
+          const preparedSpeech = prefetched?.result;
+          if (token !== state.ttsToken) return;
+
+          // Start synthesis of the next long-form chunk before current audio
+          // begins playing. This hides most Edge network/synthesis latency.
+          pendingSpeech = index + 1 < speechSegments.length
+            ? prefetchEdgeSegment(speechSegments[index + 1].text, {voiceId, expression, preview})
+            : null;
+
+          if (preparedSpeech?.browserFallback) await speakBrowser(segment.text, token);
+          else await playVoiceBlob(preparedSpeech?.blob, token, 'Edge');
           if (token !== state.ttsToken) return;
           await waitSpeechPause(segment.pause_after_ms, token);
         }
@@ -310,6 +355,8 @@
       throw error;
     } finally {
       state.ttsAbort = null;
+      if (token === state.ttsToken) state.ttsPlaying = false;
+      syncVoiceStopButton();
       if (button) { button.disabled = false; button.textContent = originalLabel || 'SPEAK'; }
     }
   }
@@ -325,6 +372,428 @@
       else if (status.configured === 'local' && !(status.local?.ready && status.local?.dependency)) el.textContent = 'Piper unavailable · install local voice assets/dependency or use browser';
       else el.textContent = `${String(status.configured || 'browser').toUpperCase()} voice ready`;
     } catch { el.textContent = 'Voice status unavailable'; }
+  }
+
+  async function refreshSTTStatus() {
+    const el = $('#stt-status');
+    if (!el) return null;
+    try {
+      const status = await api('/api/stt/status');
+      const local = status.local || {};
+      const phase = String(local.prepare_state || '').toLowerCase();
+      if (local.model_ready) el.textContent = `Local STT ready · ${status.local_model || local.model || 'base.en'} · CPU int8`;
+      else if (['queued','installing','downloading','loading'].includes(phase)) el.textContent = sttPrepareMessage(local);
+      else if (phase === 'error') el.textContent = `${local.last_error || local.prepare_message || 'Local STT preparation failed'} · see MatrixFiles/Voice/STT/prepare.log`;
+      else if (local.dependency) el.textContent = `Local STT dependency ready · prepare ${status.local_model || 'base.en'} model`;
+      else el.textContent = 'Local STT not prepared · Live Call can prepare it on demand';
+      return status;
+    } catch {
+      el.textContent = 'Local STT status unavailable';
+      return null;
+    }
+  }
+
+  function browserSpeechRecognitionCtor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  }
+
+  function setLiveCallState(next, detail='') {
+    const lc = state.liveCall;
+    lc.state = String(next || 'IDLE').toUpperCase();
+    const label = $('#live-call-state');
+    if (label) {
+      label.hidden = !lc.active;
+      label.textContent = lc.active ? `LIVE · ${lc.muted ? 'MIC MUTED' : lc.state}${detail ? ` · ${detail}` : ''}` : 'LIVE · IDLE';
+    }
+    const main = $('#live-call');
+    if (main) main.textContent = lc.active ? 'END CALL' : 'LIVE CALL';
+    const mute = $('#live-call-mute');
+    if (mute) { mute.hidden = !lc.active; mute.textContent = lc.muted ? 'UNMUTE MIC' : 'MUTE MIC'; }
+    syncVoiceStopButton();
+  }
+
+  function stopBrowserRecognition() {
+    const lc = state.liveCall;
+    clearTimeout(lc.browserRestartTimer); lc.browserRestartTimer = null;
+    if (lc.browserRecognition) {
+      try { lc.browserRecognition.onend = null; lc.browserRecognition.abort(); } catch {}
+      lc.browserRecognition = null;
+    }
+  }
+
+  function stopLocalRecorder({discard=true} = {}) {
+    const lc = state.liveCall;
+    const recorder = lc.recorder;
+    if (!recorder) return;
+    lc.recorderDiscard = !!discard;
+    if (recorder.state !== 'inactive') { try { recorder.stop(); } catch {} }
+  }
+
+  function liveAudioLevel() {
+    const analyser = state.liveCall.analyser;
+    if (!analyser) return 0;
+    const buffer = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buffer);
+    let sum = 0;
+    for (const value of buffer) { const normalized = (value - 128) / 128; sum += normalized * normalized; }
+    return Math.sqrt(sum / Math.max(1, buffer.length));
+  }
+
+  function startLiveVadLoop() {
+    const lc = state.liveCall;
+    if (lc.vadTimer) return;
+    lc.vadTimer = setInterval(() => {
+      if (!lc.active || lc.muted || !lc.analyser) return;
+      const now = performance.now();
+      const level = liveAudioLevel();
+      if (lc.state === 'LISTENING' && lc.mode === 'local' && lc.recorder) {
+        if (level >= 0.030) { lc.speechHeard = true; lc.lastVoiceAt = now; }
+        if (lc.speechHeard && now - lc.lastVoiceAt >= 950) {
+          setLiveCallState('TRANSCRIBING');
+          stopLocalRecorder({discard:false});
+        } else if (!lc.speechHeard && now - lc.recordingStartedAt >= 15000) {
+          stopLocalRecorder({discard:true});
+        } else if (now - lc.recordingStartedAt >= 60000) {
+          setLiveCallState(lc.speechHeard ? 'TRANSCRIBING' : 'LISTENING');
+          stopLocalRecorder({discard:!lc.speechHeard});
+        }
+      } else if (lc.state === 'SPEAKING' && lc.mode === 'local' && now - lc.speakerStartedAt > 650) {
+        if (level >= 0.075) lc.bargeFrames += 1; else lc.bargeFrames = 0;
+        if (lc.bargeFrames >= 3) {
+          lc.bargeFrames = 0; lc.processing = false;
+          stopSpeech({notifyBackend:true, release:false});
+          setLiveCallState('LISTENING', 'interrupted');
+          setTimeout(() => { if (lc.active && !lc.processing) startLocalListening(); }, 40);
+        }
+      }
+    }, 80);
+  }
+
+  async function ensureLocalMicStream() {
+    const lc = state.liveCall;
+    const generation = lc.generation;
+    if (lc.stream?.active && lc.analyser) return lc.stream;
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone capture is unavailable in this WebView');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1},
+      video:false
+    });
+    if (!lc.active || lc.generation !== generation) { stream.getTracks().forEach(track => track.stop()); return null; }
+    stream.getAudioTracks().forEach(track => { track.enabled = !lc.muted; });
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) { stream.getTracks().forEach(track => track.stop()); throw new Error('Web Audio is unavailable'); }
+    const audioContext = new AudioContextCtor();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.2;
+    source.connect(analyser);
+    lc.stream = stream; lc.audioContext = audioContext; lc.source = source; lc.analyser = analyser;
+    startLiveVadLoop();
+    return stream;
+  }
+
+  function recorderMimeType() {
+    if (typeof MediaRecorder === 'undefined') return '';
+    for (const type of ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg']) {
+      if (!MediaRecorder.isTypeSupported || MediaRecorder.isTypeSupported(type)) return type;
+    }
+    return '';
+  }
+
+  async function transcribeLocalBlob(blob, durationMs) {
+    const lc = state.liveCall;
+    if (lc.muted) return;
+    const generation = lc.generation;
+    const captureGeneration = lc.captureGeneration || 0;
+    const stale = () => !lc.active || lc.muted || lc.generation !== generation || (lc.captureGeneration || 0) !== captureGeneration;
+    if (!lc.active || !blob || !blob.size) { if (lc.active) resumeLiveListening(); return; }
+    setLiveCallState('TRANSCRIBING');
+    const form = new FormData();
+    const baseType = String(blob.type || 'audio/webm').split(';', 1)[0];
+    const extension = baseType.includes('ogg') ? 'ogg' : baseType.includes('wav') ? 'wav' : baseType.includes('mp4') || baseType.includes('m4a') ? 'm4a' : 'webm';
+    form.append('audio', blob, `utterance.${extension}`);
+    form.append('duration_ms', String(Math.max(1, Math.min(60000, Math.round(Number(durationMs) || 1)))));
+    try {
+      const response = await fetch('/api/stt/transcribe', {method:'POST', body:form});
+      if (!response.ok) {
+        let detail = `Local STT failed (${response.status})`; try { const body = await response.json(); detail = body.detail || detail; } catch {}
+        const error = new Error(typeof detail === 'string' ? detail : 'Local STT failed'); error.status = response.status; throw error;
+      }
+      const result = await response.json();
+      if (stale()) return;
+      const transcript = String(result.text || '').trim();
+      if (!transcript) { setLiveCallState('LISTENING', 'no speech'); resumeLiveListening(); return; }
+      await handleLiveTranscript(transcript);
+    } catch (error) {
+      if (stale()) return;
+      const allowBrowser = !!state.settings.stt_allow_browser_online;
+      if (allowBrowser && browserSpeechRecognitionCtor()) {
+        lc.mode = 'browser';
+        setLiveCallState('LISTENING', 'browser fallback');
+        startBrowserListening();
+        return;
+      }
+      showToast(error.message || 'Local STT failed', {title:'Live Call', tone:'danger', duration:3600});
+      if (lc.active) { setLiveCallState('LISTENING'); setTimeout(startLocalListening, 200); }
+    }
+  }
+
+  function startLocalListening() {
+    const lc = state.liveCall;
+    if (!lc.active || lc.muted || lc.processing || lc.state === 'SPEAKING') return;
+    if (!lc.stream?.active) { void ensureLocalMicStream().then(startLocalListening).catch(error => endLiveCall({error})); return; }
+    if (typeof MediaRecorder === 'undefined') { endLiveCall({error:new Error('MediaRecorder is unavailable')}); return; }
+    if (lc.recorder && lc.recorder.state !== 'inactive') return;
+    lc.chunks = []; lc.recorderDiscard = false; lc.speechHeard = false; lc.lastVoiceAt = 0; lc.recordingStartedAt = performance.now();
+    const mimeType = recorderMimeType();
+    let recorder;
+    try { recorder = new MediaRecorder(lc.stream, mimeType ? {mimeType} : undefined); }
+    catch (error) { endLiveCall({error}); return; }
+    lc.recorder = recorder;
+    recorder.ondataavailable = event => { if (lc.recorder === recorder && event.data?.size) lc.chunks.push(event.data); };
+    recorder.onerror = event => { showToast(event?.error?.message || 'Microphone recorder failed', {title:'Live Call', tone:'danger'}); };
+    recorder.onstop = () => {
+      if (lc.recorder !== recorder) return;
+      const discard = lc.recorderDiscard;
+      const chunks = lc.chunks.slice();
+      const actualType = recorder.mimeType || mimeType || 'audio/webm';
+      lc.recorder = null; lc.chunks = []; lc.recorderDiscard = false;
+      if (!lc.active || lc.muted) return;
+      if (discard || !lc.speechHeard) { if (lc.state === 'LISTENING') setTimeout(startLocalListening, 120); return; }
+      const blob = new Blob(chunks, {type:actualType});
+      const durationMs = Math.max(1, Math.min(60000, performance.now() - lc.recordingStartedAt));
+      void transcribeLocalBlob(blob, durationMs);
+    };
+    recorder.start(250);
+    setLiveCallState('LISTENING', 'local STT');
+  }
+
+  function startBrowserListening() {
+    const lc = state.liveCall;
+    if (!lc.active || lc.muted || lc.processing || lc.state === 'SPEAKING') return;
+    const Ctor = browserSpeechRecognitionCtor();
+    if (!Ctor || !state.settings.stt_allow_browser_online) {
+      endLiveCall({error:new Error('Browser STT fallback is unavailable or not permitted')}); return;
+    }
+    stopBrowserRecognition();
+    const recognition = new Ctor();
+    lc.browserRecognition = recognition;
+    recognition.lang = 'en-US'; recognition.continuous = false; recognition.interimResults = true; recognition.maxAlternatives = 1;
+    let finalText = '';
+    recognition.onresult = event => {
+      if (lc.browserRecognition !== recognition || lc.muted) return;
+      for (let i = event.resultIndex || 0; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        if (result.isFinal) finalText += `${result[0]?.transcript || ''} `;
+      }
+    };
+    recognition.onerror = event => {
+      if (['aborted','no-speech'].includes(String(event?.error || ''))) return;
+      if (lc.active) showToast(`Browser STT · ${event?.error || 'failed'}`, {title:'Live Call', tone:'danger', duration:3000});
+    };
+    recognition.onend = () => {
+      if (lc.browserRecognition !== recognition || lc.muted) return;
+      if (lc.browserRecognition === recognition) lc.browserRecognition = null;
+      const transcript = finalText.trim();
+      if (transcript && lc.active && !lc.processing) { void handleLiveTranscript(transcript); return; }
+      if (lc.active && !lc.muted && !lc.processing && lc.state === 'LISTENING' && lc.mode === 'browser') {
+        lc.browserRestartTimer = setTimeout(startBrowserListening, 220);
+      }
+    };
+    try { recognition.start(); setLiveCallState('LISTENING', 'Browser STT'); }
+    catch (error) { endLiveCall({error}); }
+  }
+
+  function resumeLiveListening() {
+    const lc = state.liveCall;
+    if (!lc.active || lc.muted || lc.processing) return;
+    setLiveCallState('LISTENING');
+    if (lc.mode === 'browser') startBrowserListening(); else startLocalListening();
+  }
+
+  async function handleLiveTranscript(text) {
+    const lc = state.liveCall;
+    const transcript = String(text || '').trim();
+    if (!lc.active || lc.muted || lc.processing || !transcript) return;
+    lc.processing = true;
+    stopLocalRecorder({discard:true}); stopBrowserRecognition();
+    setLiveCallState('THINKING', transcript.length > 54 ? `${transcript.slice(0, 51)}…` : transcript);
+    try {
+      const completed = await sendChat(transcript, {suppressAutoSpeak:true});
+      const assistant = String(completed?.assistant || '').trim();
+      if (!lc.active) return;
+      if (assistant) {
+        setLiveCallState('SPEAKING');
+        lc.speakerStartedAt = performance.now(); lc.bargeFrames = 0;
+        await speakText(assistant);
+      }
+    } catch (error) {
+      if (lc.active) showToast(error.message || 'Live turn failed', {title:'Live Call', tone:'danger', duration:3600});
+    } finally {
+      lc.processing = false;
+      if (lc.active && lc.state !== 'LISTENING') resumeLiveListening();
+    }
+  }
+
+  function sttPrepareMessage(local = {}) {
+    const phase = String(local.prepare_state || '').toLowerCase();
+    const message = String(local.prepare_message || '').trim();
+    if (message) return message;
+    if (phase === 'installing') return 'Installing local STT dependency…';
+    if (phase === 'downloading') return 'Downloading local STT model…';
+    if (phase === 'loading') return 'Loading local STT model…';
+    if (phase === 'queued') return 'Starting local STT preparation…';
+    return 'Preparing local STT…';
+  }
+
+  async function sttRequest(path, opts = {}, signal = null) {
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    signal?.addEventListener('abort', cancel, {once:true});
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; cancel(); }, 15000);
+    try {
+      if (controller.signal.aborted) throw new DOMException('Preparation cancelled', 'AbortError');
+      return await api(path, {...opts, signal:controller.signal});
+    } catch (error) {
+      if (timedOut && !signal?.aborted) throw new Error('Local STT request timed out. Retry preparation.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', cancel);
+    }
+  }
+
+  async function pollLocalSTTPreparation({timeoutMs=15*60*1000, onStatus=null, signal=null} = {}) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const status = await sttRequest('/api/stt/status', {}, signal);
+      if (signal?.aborted) throw new DOMException('Preparation cancelled', 'AbortError');
+      const local = status.local || {};
+      if (onStatus) onStatus(status);
+      if (local.model_ready || String(local.prepare_state || '').toLowerCase() === 'ready') return status;
+      if (String(local.prepare_state || '').toLowerCase() === 'error') {
+        throw new Error(local.last_error || local.prepare_message || 'Local STT preparation failed');
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    throw new Error('Local STT preparation timed out. Check MatrixFiles/Voice/STT/prepare.log.');
+  }
+
+  async function prepareLiveCallSTT(signal) {
+    const lc = state.liveCall;
+    setLiveCallState('PREPARING', 'local STT');
+    try {
+      let status = await sttRequest('/api/stt/status', {}, signal);
+      if (!status.local?.model_ready) {
+        await sttRequest('/api/stt/prepare', {method:'POST'}, signal);
+        status = await pollLocalSTTPreparation({signal, onStatus: current => setLiveCallState('PREPARING', sttPrepareMessage(current.local || {}))});
+      }
+      if (signal?.aborted) throw new DOMException('Preparation cancelled', 'AbortError');
+      if (status.local?.model_ready) { lc.mode = 'local'; return 'local'; }
+      throw new Error('Local STT did not become ready');
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      if (state.settings.stt_allow_browser_online && browserSpeechRecognitionCtor()) {
+        lc.mode = 'browser'; return 'browser';
+      }
+      throw error;
+    }
+  }
+
+  async function requestLiveMicrophonePermission() {
+    if (!confirm('Allow microphone access?\n\nLive Call needs your microphone to hear you. Select OK to allow access and start the call, or Cancel to go back.')) return false;
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone capture is unavailable in this WebView.');
+    try {
+      // Request system permission before downloading/preparing speech models.
+      // Release this short check immediately; call capture starts when ready.
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+      stream.getTracks().forEach(track => track.stop());
+      return true;
+    } catch (error) {
+      if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+        throw new Error('Microphone access was denied. Allow microphone access in Windows or browser settings, then try Live Call again.');
+      }
+      if (error.name === 'NotFoundError') throw new Error('No microphone was found. Connect a microphone and try Live Call again.');
+      if (error.name === 'NotReadableError') throw new Error('The microphone could not be opened. Check whether another app is using it, then try again.');
+      throw error;
+    }
+  }
+
+  async function startLiveCall() {
+    const lc = state.liveCall;
+    if (lc.active) { await endLiveCall(); return; }
+    if (state.abort) { showToast('Wait for the current model response to finish or stop it first.', {title:'Live Call', tone:'danger'}); return; }
+    if (!state.settings.voice_output_enabled || String(state.settings.tts_provider || 'browser') === 'off') {
+      showToast('Enable Voice Output and select a voice provider before starting Live Call.', {title:'Live Call', tone:'danger', duration:3600}); return;
+    }
+    lc.active = true; lc.muted = false; lc.processing = false; lc.generation += 1;
+    const generation = lc.generation;
+    const preparation = new AbortController();
+    lc.preparation = preparation;
+    setLiveCallState('PREPARING', 'microphone permission');
+    try {
+      const permitted = await requestLiveMicrophonePermission();
+      if (!lc.active || lc.generation !== generation) return;
+      if (!permitted) { await endLiveCall(); return; }
+      const mode = await prepareLiveCallSTT(preparation.signal);
+      if (!lc.active || lc.generation !== generation) return;
+      if (mode === 'local') await ensureLocalMicStream();
+      if (!lc.active || lc.generation !== generation) return;
+      setLiveCallState('LISTENING');
+      if (mode === 'local') startLocalListening(); else startBrowserListening();
+    } catch (error) {
+      if (lc.generation === generation) await endLiveCall({error});
+    }
+  }
+
+  async function endLiveCall({error=null} = {}) {
+    const lc = state.liveCall;
+    lc.active = false; lc.processing = false; lc.generation += 1;
+    lc.preparation?.abort(); lc.preparation = null;
+    stopBrowserRecognition(); stopLocalRecorder({discard:true});
+    if (lc.vadTimer) { clearInterval(lc.vadTimer); lc.vadTimer = null; }
+    if (lc.stream) { for (const track of lc.stream.getTracks()) { try { track.stop(); } catch {} } lc.stream = null; }
+    try { lc.source?.disconnect(); } catch {} lc.source = null; lc.analyser = null;
+    if (lc.audioContext) { try { await lc.audioContext.close(); } catch {} lc.audioContext = null; }
+    stopSpeech({notifyBackend:true, release:false});
+    fetch('/api/stt/release', {method:'POST'}).catch(()=>{});
+    lc.mode = 'local'; lc.muted = false; setLiveCallState('IDLE');
+    if (error) showToast(error.message || 'Live Call ended', {title:'Live Call', tone:'danger', duration:4000});
+  }
+
+  function toggleLiveMute() {
+    const lc = state.liveCall;
+    if (!lc.active) return;
+    lc.muted = !lc.muted;
+    if (lc.muted) lc.captureGeneration = (lc.captureGeneration || 0) + 1;
+    if (lc.stream) lc.stream.getAudioTracks().forEach(track => { track.enabled = !lc.muted; });
+    if (lc.muted) { stopLocalRecorder({discard:true}); stopBrowserRecognition(); }
+    setLiveCallState(lc.state);
+    if (!lc.muted && !lc.processing && lc.state !== 'PREPARING') resumeLiveListening();
+  }
+
+  async function prepareLocalSTTFromSettings() {
+    const button = $('#prepare-local-stt');
+    if (button) { button.disabled = true; button.textContent = 'PREPARING…'; }
+    const status = $('#stt-status');
+    if (status) status.textContent = 'Starting local STT preparation…';
+    try {
+      const snapshot = collectSettings();
+      state.settings = await persistSettingsSnapshot(snapshot);
+      await sttRequest('/api/stt/prepare', {method:'POST'});
+      const result = await pollLocalSTTPreparation({onStatus: current => {
+        if (status) status.textContent = sttPrepareMessage(current.local || {});
+      }});
+      if (status) status.textContent = `Local STT ready · ${result.local?.model || state.settings.stt_local_model || 'base.en'} · CPU int8`;
+    } catch (error) {
+      const message = error.message || 'Local STT preparation failed';
+      if (status) status.textContent = `${message} · see MatrixFiles/Voice/STT/prepare.log`;
+      showToast(message, {title:'Voice', tone:'danger', duration:6000});
+    } finally {
+      if (button) { button.disabled = false; button.textContent = 'PREPARE LOCAL STT'; }
+    }
   }
 
   function primeEdgeVoiceSelection(value) {
@@ -419,6 +888,7 @@
   }
 
   async function handleTTSProviderChange() {
+    if (state.liveCall.active) await endLiveCall();
     const provider = $('#set-tts-provider').value;
     state.settings.tts_provider = provider;
     stopSpeech({notifyBackend:true, release:provider !== 'local'});
@@ -1627,7 +2097,7 @@
     return true;
   }
 
-  async function runTurn(endpoint, payload, retryIndex, {onRejected=null} = {}) {
+  async function runTurn(endpoint, payload, retryIndex, {onRejected=null, suppressAutoSpeak=false} = {}) {
     if (state.abort) return false;
     if (!(await ensureRuntimeReady())) return false;
     const stream = appendStreamingAssistant();
@@ -1643,8 +2113,8 @@
       await refreshSessions();
       const current = await api(`/api/sessions/${encodeURIComponent(state.session.id)}`); state.session = current.session; renderChat('bottom');
       setGenerationPhase('ready', 'Ready'); await refreshRuntime({silent:true}).catch(()=>{});
-      if (state.settings.voice_output_enabled && state.settings.tts_auto_speak && completedTurn?.assistant) void speakText(completedTurn.assistant).catch(e => setComposeStatus(`Voice · ${e.message}`));
-      return true;
+      if (!suppressAutoSpeak && state.settings.voice_output_enabled && state.settings.tts_auto_speak && completedTurn?.assistant) void speakText(completedTurn.assistant).catch(e => setComposeStatus(`Voice · ${e.message}`));
+      return completedTurn;
     } catch (e) {
       stream.card.classList.remove('streaming-cursor');
       if (e.name === 'AbortError') {
@@ -1656,26 +2126,28 @@
         stream.think.setLive(false); stream.think.setOpen(false); showTurnError(stream, e.message || 'The local model could not finish this response.', retryIndex);
         setGenerationPhase('error','Response failed · retry available'); await refreshSessions().catch(()=>{}); await refreshRuntime({silent:true}).catch(()=>{});
       }
-      return false;
+      return null;
     } finally {
       state.abort = null; setBusy(false); $('#chat-input').disabled = false; $('#chat-input').focus();
       if (state.generationPhase === 'starting' || state.generationPhase === 'thinking' || state.generationPhase === 'generating') setGenerationPhase('ready','Ready');
     }
   }
 
-  async function sendChat() {
-    if (state.abort || state.heroExitActive) return;
-    const input = $('#chat-input'); const text = input.value.trim(); if (!text) return;
+  async function sendChat(forcedText = null, {suppressAutoSpeak=false} = {}) {
+    if (state.abort || state.heroExitActive) return null;
+    const input = $('#chat-input'); const text = forcedText === null ? input.value.trim() : String(forcedText || '').trim(); if (!text) return null;
     if (!(await ensureRuntimeReady())) return;
     if (!state.session) await createSession();
     if (!(state.session.messages || []).length && $('#empty-state')) await animateHeroExit();
     const userIndex = state.session.messages.length;
     const localUser = {role:'user', content:text}; state.session.messages.push(localUser);
-    input.value = ''; autoSizeInput();
-    const drafts = {...(state.uiState?.session_drafts || {}), [state.session.id]:''};
-    state.uiState = {...state.uiState, draft:'', session_drafts:drafts}; persistUiState({draft:'', session_drafts:drafts}, 0);
+    if (forcedText === null) {
+      input.value = ''; autoSizeInput();
+      const drafts = {...(state.uiState?.session_drafts || {}), [state.session.id]:''};
+      state.uiState = {...state.uiState, draft:'', session_drafts:drafts}; persistUiState({draft:'', session_drafts:drafts}, 0);
+    }
     renderChat('bottom'); $('#messages .message-row.user:last-of-type')?.classList.add('entering');
-    await runTurn('/api/chat', {session_id:state.session.id, message:text}, userIndex, {onRejected:async () => {
+    return await runTurn('/api/chat', {session_id:state.session.id, message:text}, userIndex, {suppressAutoSpeak, onRejected:async () => {
       if (state.session?.messages?.at(-1) === localUser) state.session.messages.pop();
       input.value = text; autoSizeInput(); renderChat('bottom');
     }});
@@ -1719,7 +2191,8 @@
     primeEdgeVoiceSelection(s.tts_edge_voice || 'en-US-AvaNeural'); $('#set-tts-local-voice').value = s.tts_local_voice || 'en_US-lessac-medium'; $('#set-tts-fallback').value = s.tts_online_fallback || 'browser';
     $('#set-tts-rate').value = s.tts_rate ?? 1; $('#tts-rate-output').value = Number(s.tts_rate ?? 1).toFixed(2); $('#set-tts-pitch').value = s.tts_pitch ?? 1; $('#tts-pitch-output').value = Number(s.tts_pitch ?? 1).toFixed(2);
     $('#set-tts-volume').value = s.tts_volume ?? 1; $('#tts-volume-output').value = Number(s.tts_volume ?? 1).toFixed(2); $('#set-tts-tone').value = s.tts_tone || 'neutral'; $('#set-tts-intensity').value = s.tts_intensity ?? .7; $('#tts-intensity-output').value = `${Math.round(Number(s.tts_intensity ?? .7) * 100)}%`; $('#set-tts-pause-style').value = s.tts_pause_style || 'natural';
-    $('#set-tts-max-chars').value = s.tts_max_chars ?? 1200; $('#set-tts-cpu-threads').value = s.tts_cpu_threads ?? 2; $('#set-tts-skip-code').checked = s.tts_skip_code !== false; $('#set-tts-skip-urls').checked = s.tts_skip_urls !== false; $('#set-tts-stop-previous').checked = s.tts_stop_previous !== false;
+    $('#set-tts-max-chars').value = s.tts_max_chars ?? TTS_HARD_CEILING; $('#set-tts-cpu-threads').value = s.tts_cpu_threads ?? 2; $('#set-tts-skip-code').checked = s.tts_skip_code !== false; $('#set-tts-skip-urls').checked = s.tts_skip_urls !== false; $('#set-tts-stop-previous').checked = s.tts_stop_previous !== false;
+    $('#set-stt-browser-fallback').checked = !!s.stt_allow_browser_online; $('#set-stt-local-model').value = s.stt_local_model || 'base.en';
     syncTTSProviderUI();
     if ((s.tts_provider || 'browser') === 'edge' && !!s.tts_allow_online) setTimeout(() => { void loadEdgeVoices().catch(()=>{}); }, 0);
     $('#set-retrieval-enabled').checked = s.retrieval_enabled !== false; $('#set-retrieval-chat').checked = s.retrieval_include_older_chat !== false; $('#set-retrieval-cross-chat').checked = s.retrieval_include_cross_chat !== false; $('#set-retrieval-knowledge').checked = s.retrieval_include_knowledge !== false;
@@ -1766,6 +2239,7 @@
       tts_edge_voice: $('#set-tts-edge-voice').value.trim(), tts_local_voice: $('#set-tts-local-voice').value.trim(), tts_online_fallback: $('#set-tts-fallback').value,
       tts_rate: Number($('#set-tts-rate').value), tts_pitch: Number($('#set-tts-pitch').value), tts_volume: Number($('#set-tts-volume').value), tts_tone: $('#set-tts-tone').value, tts_intensity: Number($('#set-tts-intensity').value), tts_pause_style: $('#set-tts-pause-style').value, tts_max_chars: Number($('#set-tts-max-chars').value), tts_cpu_threads: Number($('#set-tts-cpu-threads').value),
       tts_skip_code: $('#set-tts-skip-code').checked, tts_skip_urls: $('#set-tts-skip-urls').checked, tts_stop_previous: $('#set-tts-stop-previous').checked,
+      stt_provider: 'hybrid', stt_allow_browser_online: $('#set-stt-browser-fallback').checked, stt_local_model: $('#set-stt-local-model').value, stt_max_seconds: 60,
       retrieval_enabled: $('#set-retrieval-enabled').checked, retrieval_include_older_chat: $('#set-retrieval-chat').checked, retrieval_include_cross_chat: $('#set-retrieval-cross-chat').checked, retrieval_include_knowledge: $('#set-retrieval-knowledge').checked,
       retrieval_max_chunks: 4, retrieval_max_chars: 3600,
       system_prompt: $('#set-system-prompt').value, ui_mode: $('#set-ui-mode').value, theme_preset: $('#set-theme').value, ui_density: $('#set-density').value,
@@ -2363,6 +2837,7 @@
     $$('.settings-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
     $$('.settings-page').forEach(p => p.classList.toggle('active', p.dataset.page === tab));
     if (tab === 'chat') refreshRetrievalStatus();
+    if (tab === 'voice') { refreshTTSStatus(); refreshSTTStatus(); }
   }
 
   function filterSettings(query='') {
@@ -2486,6 +2961,9 @@
     $('#kill-localhost')?.addEventListener('click', () => shutdownStudio('settings'));
     $('#kill-host-exit')?.addEventListener('click', () => shutdownStudio('quick'));
     $('#new-chat').addEventListener('click', createSession); $('#send-chat').addEventListener('click', sendChat); $('#stop-chat').addEventListener('click', () => stopChat(true)); $('#export-chat').addEventListener('click', exportChat);
+    $('#live-call')?.addEventListener('click', () => { void startLiveCall(); });
+    $('#live-call-mute')?.addEventListener('click', toggleLiveMute);
+    $('#stop-voice-main')?.addEventListener('click', () => { stopSpeech({notifyBackend:true, release:false}); if (state.liveCall.active && state.liveCall.state === 'SPEAKING') { state.liveCall.processing = false; setTimeout(resumeLiveListening, 40); } });
     $('#chat-input').addEventListener('input', () => {
       autoSizeInput();
       const sid = state.session?.id || '';
@@ -2527,11 +3005,12 @@
     $('#set-tts-rate').addEventListener('input', e => $('#tts-rate-output').value=Number(e.target.value).toFixed(2)); $('#set-tts-pitch').addEventListener('input', e => $('#tts-pitch-output').value=Number(e.target.value).toFixed(2)); $('#set-tts-volume').addEventListener('input', e => $('#tts-volume-output').value=Number(e.target.value).toFixed(2)); $('#set-tts-intensity').addEventListener('input', e => $('#tts-intensity-output').value=`${Math.round(Number(e.target.value)*100)}%`);
     $('#voice-preview').addEventListener('click', () => speakText('Matrix Studio voice systems online.', {preview:true, provider:$('#set-tts-provider').value, button:$('#voice-preview')}).catch(e => showToast(e.message || 'Voice preview failed', {title:'Voice', tone:'danger', duration:3200})));
     $('#voice-stop').addEventListener('click', () => stopSpeech({notifyBackend:true, release:false}));
-    $('#set-voice-output').addEventListener('change', e => { state.settings.voice_output_enabled = !!e.target.checked; if (!e.target.checked) stopSpeech({notifyBackend:true, release:true}); renderChat('keep'); setTimeout(refreshTTSStatus, 180); });
+    $('#set-voice-output').addEventListener('change', e => { state.settings.voice_output_enabled = !!e.target.checked; if (!e.target.checked) { stopSpeech({notifyBackend:true, release:true}); if (state.liveCall.active) void endLiveCall(); } renderChat('keep'); setTimeout(refreshTTSStatus, 180); });
     $('#set-tts-provider').addEventListener('change', () => { void handleTTSProviderChange(); });
     $('#set-tts-allow-online').addEventListener('change', () => { void handleTTSOnlineChange(); });
     $('#set-tts-edge-voice').addEventListener('change', () => { state.settings.tts_edge_voice = $('#set-tts-edge-voice').value; void persistSettingsSnapshot(collectSettings()).catch(e => { if ($('#tts-status')) $('#tts-status').textContent = e.message; }); });
     $('#refresh-edge-voices').addEventListener('click', () => { void loadEdgeVoices({force:true}).catch(e => showToast(e.message || 'Edge voice discovery failed', {title:'Voice', tone:'danger', duration:3200})); });
+    $('#prepare-local-stt')?.addEventListener('click', () => { void prepareLocalSTTFromSettings(); });
     const outputBindings = [
       ['set-background-opacity','background-opacity-output',v=>Number(v).toFixed(2)],
       ['set-background-blur','background-blur-output',v=>`${Number(v).toFixed(0)}px`],
@@ -2587,6 +3066,7 @@
       const data = await api('/api/state'); state.settings = data.settings || {}; state.runtime = data.runtime || {}; state.sessions = data.sessions || []; state.uiState = data.ui_state || {};
       $('#build-id').textContent = data.build_id || '—'; applyAppearance(); renderRuntime(); $('#quick-think').value = state.settings.think_mode || 'auto'; syncQuickControlLabels(); fillSettingsForm(); renderSessions();
       await refreshTTSStatus();
+      await refreshSTTStatus();
       await loadSpecialistGroups({quiet:true});
       syncResponsiveShell();
       const remembered = state.sessions.find(s => s.id === state.uiState.active_session_id);

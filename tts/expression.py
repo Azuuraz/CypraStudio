@@ -139,47 +139,108 @@ def _shape_pause_cues(text: str, style: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def build_speech_plan(text: str, *, style: object = "natural", maximum_segments: int = 24) -> list[dict[str, object]]:
-    """Build a bounded speech plan without multiplying Edge round-trips.
+def _chunk_speech_text(text: str, maximum_chunk_chars: int) -> list[str]:
+    """Split long speech at strong boundaries without dropping tail text."""
+    value = re.sub(r"\s+", " ", str(text or "")).strip()
+    limit = max(400, min(5000, int(maximum_chunk_chars or 3200)))
+    if not value:
+        return []
+    if len(value) <= limit:
+        return [value]
 
-    Natural and expressive punctuation stay inside one synthesis request. Only
-    explicit ``[pause:NNN]`` markers create additional requests because they
-    require a deterministic client-side silence duration. Manual pauses remain
-    capped to 2000 ms.
+    chunks: list[str] = []
+    remaining = value
+    minimum_cut = max(160, int(limit * 0.45))
+    while len(remaining) > limit:
+        window = remaining[:limit]
+        cut = -1
+
+        for match in re.finditer(r"[.!?][\"')\]]*\s+", window):
+            if match.end() >= minimum_cut:
+                cut = match.end()
+        if cut < minimum_cut:
+            for match in re.finditer(r"[;:]\s+", window):
+                if match.end() >= minimum_cut:
+                    cut = match.end()
+        if cut < minimum_cut:
+            space = window.rfind(" ", minimum_cut)
+            if space >= minimum_cut:
+                cut = space + 1
+        if cut <= 0:
+            cut = limit
+
+        chunk = remaining[:cut].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[cut:].strip()
+
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+def build_speech_plan(
+    text: str,
+    *,
+    style: object = "natural",
+    maximum_segments: int = 48,
+    maximum_chunk_chars: int = 3200,
+    first_chunk_chars: int | None = None,
+) -> list[dict[str, object]]:
+    """Build a bounded long-form speech plan.
+
+    Short ordinary speech remains one Edge request. Responses longer than the
+    chunk target are split at sentence/word boundaries so the client can
+    prefetch the next synthesis request while current audio is playing. Manual
+    ``[pause:NNN]`` markers still create deterministic client-side silence and
+    remain capped to 2000 ms.
     """
     value = str(text or "").replace("\x00", " ").strip()
     if not value:
         return []
     pause_style = normalize_pause_style(style)
-    maximum_segments = max(1, min(48, int(maximum_segments or 24)))
-
-    matches = list(_MANUAL_PAUSE.finditer(value))
-    if not matches:
-        shaped = _shape_pause_cues(value, pause_style)
-        return [{"text": shaped, "pause_after_ms": 0}] if shaped else []
+    maximum_segments = max(1, min(96, int(maximum_segments or 48)))
+    maximum_chunk_chars = max(400, min(5000, int(maximum_chunk_chars or 3200)))
 
     plan: list[dict[str, object]] = []
-    pos = 0
-    for match in matches:
-        spoken = _shape_pause_cues(value[pos:match.start()], pause_style)
-        pause_ms = min(2000, int(match.group(1)))
-        if spoken:
-            plan.append({"text": spoken, "pause_after_ms": pause_ms})
-        elif plan:
-            plan[-1]["pause_after_ms"] = max(int(plan[-1]["pause_after_ms"]), pause_ms)
-        pos = match.end()
 
-    tail = _shape_pause_cues(value[pos:], pause_style)
-    if tail:
-        plan.append({"text": tail, "pause_after_ms": 0})
+    def append_spoken(spoken: str, pause_ms: int = 0) -> None:
+        shaped = _shape_pause_cues(spoken, pause_style)
+        chunks = []
+        if not plan and first_chunk_chars and maximum_segments > 1:
+            opening_limit = max(400, min(maximum_chunk_chars, int(first_chunk_chars)))
+            if len(shaped) > opening_limit:
+                opening = _chunk_speech_text(shaped, opening_limit)[0]
+                chunks.append(opening)
+                shaped = shaped[len(opening):].strip()
+        chunks.extend(_chunk_speech_text(shaped, maximum_chunk_chars))
+        for chunk in chunks:
+            plan.append({"text": chunk, "pause_after_ms": 0})
+        if chunks and pause_ms:
+            plan[-1]["pause_after_ms"] = min(2000, max(0, int(pause_ms)))
+        elif not chunks and pause_ms and plan:
+            plan[-1]["pause_after_ms"] = max(int(plan[-1]["pause_after_ms"]), min(2000, int(pause_ms)))
+
+    pos = 0
+    for match in _MANUAL_PAUSE.finditer(value):
+        append_spoken(value[pos:match.start()], int(match.group(1)))
+        pos = match.end()
+    append_spoken(value[pos:])
 
     if not plan:
         return []
+
     if len(plan) > maximum_segments:
+        # Preserve the hard request-count bound. This path is only reachable for
+        # pathological input containing dozens of explicit manual pauses.
         head = plan[: maximum_segments - 1]
-        tail_items = plan[maximum_segments - 1 :]
-        merged_text = " ".join(str(item["text"]).strip() for item in tail_items if str(item["text"]).strip())
-        head.append({"text": merged_text, "pause_after_ms": int(tail_items[-1]["pause_after_ms"]) if tail_items else 0})
+        overflow_text = " ".join(
+            str(item["text"]).strip()
+            for item in plan[maximum_segments - 1 :]
+            if str(item["text"]).strip()
+        )
+        # Keep the entire remaining spoken tail in the final bounded request.
+        # 50k overall input + 48 segment cap makes this branch exceptional.
+        head.append({"text": overflow_text.strip(), "pause_after_ms": 0})
         plan = head
     return plan
-

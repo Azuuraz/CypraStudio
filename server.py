@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -12,7 +13,7 @@ from pathlib import Path
 import requests
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -24,6 +25,8 @@ from tts.service import TTSCancelled
 from tts.policy import normalize_edge_voice, normalize_fallback, normalize_piper_voice, normalize_provider
 from tts.expression import build_speech_plan, normalize_pause_style, normalize_tone, resolve_tone
 from tts.sanitizer import sanitize_for_online_tts, sanitize_for_speech
+from stt import LocalSTTService, STTUnavailable, audio_signature_valid
+from stt.service import MAX_AUDIO_BYTES, SUPPORTED_AUDIO_TYPES, normalize_model as normalize_stt_model
 from engine.storage import (
     DEFAULT_SETTINGS,
     delete_session,
@@ -48,7 +51,7 @@ from engine.storage import (
 )
 
 ROOT = Path(__file__).resolve().parent
-BUILD_ID = "2.3.18-edge-expression-fast-20260916"
+BUILD_ID = "2.3.22-stt-download-timeout-20260916"
 APP_ID = "matrixstudio2-local"
 INSTANCE_ID = os.environ.get("MATRIXSTUDIO2_INSTANCE_ID", "matrixstudio2-dev")
 BACKGROUND_DIR = ROOT / "data" / "background"
@@ -59,6 +62,7 @@ CLEANER_PATH = ROOT / "Tools" / "CYPRA CLEAN - MatrixStudio Maintenance.bat"
 _OLLAMA_RESTART_LOCK = threading.Lock()
 _SHUTDOWN_STARTED = threading.Event()
 LOCAL_TTS = LocalTTSService(ROOT)
+LOCAL_STT = LocalSTTService(ROOT)
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_WORKSPACE_IMPORT_BYTES = 64 * 1024 * 1024
 MAX_REQUEST_BYTES = 70 * 1024 * 1024
@@ -344,7 +348,7 @@ class HFInstallBody(BaseModel):
 
 
 class TTSRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=10000)
+    text: str = Field(min_length=1, max_length=50000)
     voice_id: str | None = Field(default=None, max_length=128)
     provider: str | None = Field(default=None, max_length=24)
     rate: float | None = Field(default=None, ge=0.5, le=2.0)
@@ -357,7 +361,7 @@ class TTSRequest(BaseModel):
 
 
 class TTSPlanRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=10000)
+    text: str = Field(min_length=1, max_length=50000)
     tone: str | None = Field(default=None, max_length=16)
     intensity: float | None = Field(default=None, ge=0.0, le=1.0)
     pause_style: str | None = Field(default=None, max_length=16)
@@ -816,6 +820,64 @@ def _browser_tts_error(message: str = "Use browser Speech Synthesis for this pro
     )
 
 
+@app.get("/api/stt/status")
+def stt_status() -> dict[str, Any]:
+    settings = load_settings()
+    return {
+        "ok": True,
+        "provider": "hybrid",
+        "allow_browser_online": bool(settings.get("stt_allow_browser_online")),
+        "local_model": normalize_stt_model(settings.get("stt_local_model")),
+        "max_seconds": int(settings.get("stt_max_seconds") or 60),
+        "local": LOCAL_STT.status(),
+    }
+
+
+@app.post("/api/stt/prepare", status_code=202)
+def stt_prepare() -> dict[str, Any]:
+    settings = load_settings()
+    model_name = normalize_stt_model(settings.get("stt_local_model"))
+    local = LOCAL_STT.begin_prepare(model_name=model_name, allow_install=True, allow_download=True)
+    return {"ok": True, "ready": bool(local.get("model_ready")), "local": local}
+
+
+@app.post("/api/stt/release")
+def stt_release() -> dict[str, Any]:
+    LOCAL_STT.release()
+    return {"ok": True, "released": True}
+
+
+@app.post("/api/stt/transcribe")
+async def stt_transcribe(audio: UploadFile = File(...), duration_ms: int = Form(...)) -> dict[str, Any]:
+    settings = load_settings()
+    if duration_ms < 1 or duration_ms > int(settings.get("stt_max_seconds") or 60) * 1000:
+        raise HTTPException(413, "Microphone utterance exceeds the 60 second hard ceiling")
+    mime = str(audio.content_type or "").split(";", 1)[0].strip().lower()
+    if mime not in SUPPORTED_AUDIO_TYPES:
+        raise HTTPException(415, "Microphone audio must be WebM, OGG, WAV, or M4A")
+    data = await audio.read(MAX_AUDIO_BYTES + 1)
+    try:
+        await audio.close()
+    except Exception:
+        pass
+    if not data or len(data) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "Microphone audio is empty or exceeds the 16 MB hard ceiling")
+    if not audio_signature_valid(data, mime):
+        raise HTTPException(415, "Microphone audio contents do not match the declared audio type")
+    try:
+        text = await asyncio.to_thread(
+            LOCAL_STT.transcribe,
+            data,
+            content_type=mime,
+            model_name=normalize_stt_model(settings.get("stt_local_model")),
+        )
+    except STTUnavailable as exc:
+        raise HTTPException(503, "Local STT is unavailable; prepare it or enable the explicit browser STT fallback") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "text": text[:100000], "provider": "local"}
+
+
 @app.get("/api/tts/status")
 def tts_status() -> dict[str, Any]:
     settings = load_settings()
@@ -884,7 +946,7 @@ def tts_edge_plan(body: TTSPlanRequest) -> dict[str, Any]:
         safe = sanitize_for_online_tts(prepared)
         safe = sanitize_for_speech(
             safe,
-            maximum=int(settings.get("tts_max_chars") or 1200),
+            maximum=int(settings.get("tts_max_chars") or 50000),
             skip_code=bool(settings.get("tts_skip_code", True)),
             skip_urls=bool(settings.get("tts_skip_urls", True)),
             privacy_harden=True,
@@ -899,7 +961,7 @@ def tts_edge_plan(body: TTSPlanRequest) -> dict[str, Any]:
     resolved = resolve_tone(requested_tone, safe)
     pause_style = normalize_pause_style(body.pause_style if body.pause_style is not None else settings.get("tts_pause_style"))
     intensity = max(0.0, min(1.0, float(body.intensity if body.intensity is not None else settings.get("tts_intensity", 0.7))))
-    segments = build_speech_plan(safe, style=pause_style, maximum_segments=24)
+    segments = build_speech_plan(safe, style=pause_style, maximum_segments=48, maximum_chunk_chars=3200, first_chunk_chars=600)
     if not segments:
         raise HTTPException(422, "Nothing speakable remains after speech planning")
     return {
@@ -951,7 +1013,7 @@ def tts_synthesize(body: TTSRequest) -> Response:
             tone=normalize_tone(body.tone if body.tone is not None else settings.get("tts_tone")),
             intensity=float(body.intensity if body.intensity is not None else settings.get("tts_intensity", 0.7)),
             threads=int(settings.get("tts_cpu_threads") or 2),
-            maximum=int(settings.get("tts_max_chars") or 1200),
+            maximum=int(settings.get("tts_max_chars") or 50000),
             skip_code=bool(settings.get("tts_skip_code", True)),
             skip_urls=bool(settings.get("tts_skip_urls", True)),
             replace=bool(settings.get("tts_stop_previous", True) if body.replace is None else body.replace),

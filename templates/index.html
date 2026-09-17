@@ -103,11 +103,14 @@
             <textarea id="chat-input" rows="1" placeholder="Ask anything. Make something. Think it through…" aria-label="Message local model"></textarea>
             <div class="composer-actions">
               <button class="composer-tool" id="export-chat" type="button" title="Export current chat">EXPORT CHAT</button>
+              <button class="composer-tool" id="live-call" type="button" title="Start a continuous voice conversation">LIVE CALL</button>
+              <button class="composer-tool" id="live-call-mute" type="button" hidden>MUTE MIC</button>
+              <button class="composer-tool danger" id="stop-voice-main" type="button" hidden>STOP VOICE</button>
               <button class="composer-tool danger" id="stop-chat" type="button" hidden>STOP</button>
               <button class="send-btn" id="send-chat" type="button">SEND</button>
             </div>
           </div>
-          <div class="compose-note compact-note"><span id="compose-status">Ready</span><span id="message-count">0 messages</span></div>
+          <div class="compose-note compact-note"><span id="compose-status">Ready</span><span id="live-call-state" hidden>LIVE · IDLE</span><span id="message-count">0 messages</span></div>
         </div>
       </footer>
     </main>
@@ -278,11 +281,13 @@
               <label><span><strong>Enable voice output</strong><small>Adds SPEAK controls to model replies. Off by default.</small></span><input id="set-voice-output" type="checkbox"></label>
               <label><span><strong>Auto-speak new replies</strong><small>Speak completed model replies automatically while voice output is enabled.</small></span><input id="set-tts-auto-speak" type="checkbox"></label>
               <label><span><strong>Allow online Edge TTS</strong><small>Explicit privacy gate. Only sanitized speech text may leave the computer for Microsoft Edge speech synthesis.</small></span><input id="set-tts-allow-online" type="checkbox"></label>
+              <label><span><strong>Allow Browser STT fallback</strong><small>Optional hybrid fallback for Live Call. Browser STT may send microphone audio to a browser/OS speech service; local STT remains first choice.</small></span><input id="set-stt-browser-fallback" type="checkbox"></label>
             </div>
             <div class="field-grid">
               <label class="field"><span>Voice provider</span><select id="set-tts-provider"><option value="browser">Device / browser voice</option><option value="edge">Edge neural voice (online)</option><option value="local">Piper local voice</option><option value="off">Off</option></select><small>The provider-specific controls below swap automatically. Edge voice discovery only runs after the online privacy gate is enabled.</small></label>
               <div class="field" id="tts-edge-voice-field" hidden><span>Edge voice</span><select id="set-tts-edge-voice"><option value="en-US-AvaNeural">Ava · en-US · Neural</option></select><small id="edge-voice-status">Enable online Edge TTS to load the full Microsoft voice catalog.</small><button class="btn ghost small" id="refresh-edge-voices" type="button">REFRESH VOICES</button></div>
               <label class="field" id="tts-local-voice-field" hidden><span>Local Piper voice</span><input id="set-tts-local-voice" autocomplete="off" value="en_US-lessac-medium"><small>Uses project-local Piper voice assets when installed.</small></label>
+              <label class="field"><span>Local STT model</span><select id="set-stt-local-model"><option value="tiny.en">Tiny English · fastest</option><option value="base.en">Base English · balanced</option><option value="small.en">Small English · more accurate</option></select><small>Live Call uses faster-whisper on CPU/int8. Models stay under MatrixFiles/Voice/STT.</small></label>
               <label class="field" id="tts-edge-fallback-field" hidden><span>Edge failure fallback</span><select id="set-tts-fallback"><option value="browser">Device / browser voice</option><option value="piper">Piper local voice</option><option value="none">No fallback</option></select></label>
               <label class="field" id="tts-edge-tone-field" hidden><span>Edge tone</span><select id="set-tts-tone"><option value="neutral">Neutral</option><option value="calm">Calm</option><option value="friendly">Friendly</option><option value="cheerful">Cheerful</option><option value="serious">Serious</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="dramatic">Dramatic</option><option value="narrator">Narrator</option><option value="auto">Auto tone</option></select><small>Presets shape Edge rate, pitch and volume without unsupported SSML.</small></label>
               <label class="field" id="tts-edge-intensity-field" hidden><span>Tone intensity <output id="tts-intensity-output">70%</output></span><input id="set-tts-intensity" type="range" min="0" max="1" step="0.05"><small>Controls how strongly the selected Edge tone modifies your manual speech settings.</small></label>
@@ -290,7 +295,7 @@
               <label class="field"><span>Speech rate <output id="tts-rate-output">1.00</output></span><input id="set-tts-rate" type="range" min="0.5" max="2" step="0.05"></label>
               <label class="field"><span>Speech pitch <output id="tts-pitch-output">1.00</output></span><input id="set-tts-pitch" type="range" min="0.5" max="2" step="0.05"><small>Applied directly to device speech and used as a bounded Edge prosody modifier.</small></label>
               <label class="field"><span>Speech volume <output id="tts-volume-output">1.00</output></span><input id="set-tts-volume" type="range" min="0.5" max="1.5" step="0.05"><small>Edge maps this to bounded volume prosody. Device speech uses values up to its native maximum.</small></label>
-              <label class="field"><span>Maximum spoken characters</span><input id="set-tts-max-chars" type="number" min="100" max="10000" step="100"><small>Long replies are clipped at a sensible sentence boundary.</small></label>
+              <label class="field"><span>Maximum spoken characters</span><input id="set-tts-max-chars" type="number" min="100" max="50000" step="100"><small>50,000 means Full Response and is the hard safety ceiling. Smaller values intentionally limit spoken text.</small></label>
               <label class="field"><span>Piper CPU threads</span><input id="set-tts-cpu-threads" type="number" min="1" max="4" step="1"><small>Piper stays CPU-only so it does not compete with the local model for VRAM.</small></label>
             </div>
             <div class="toggle-list compact-toggle">
@@ -300,6 +305,7 @@
             </div>
             <div class="settings-note"><strong>Privacy boundary.</strong><span>Piper stays local and CPU-only. The browser/device provider makes no MatrixStudio Edge request, though the operating system/browser controls how its installed speech voices are implemented. Edge is never contacted unless Allow online Edge TTS is enabled; outgoing text is sanitized again on the backend before synthesis.</span></div>
             <div class="background-actions"><button class="btn primary" id="voice-preview" type="button">PREVIEW VOICE</button><button class="btn ghost" id="voice-stop" type="button">STOP VOICE</button><span id="tts-status">Voice output is off</span></div>
+            <div class="background-actions"><button class="btn ghost" id="prepare-local-stt" type="button">PREPARE LOCAL STT</button><span id="stt-status">Local STT not checked</span></div>
           </section>
 
           <section class="settings-page" data-page="reasoning">
@@ -429,6 +435,6 @@
 
   <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
 
-  <script src="/static/js/app.js?v=edge-expression-2317"></script>
+  <script src="/static/js/app.js?v=live-mute-resume-2322"></script>
 </body>
 </html>

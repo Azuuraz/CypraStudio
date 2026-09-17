@@ -196,4 +196,4 @@ def sanitize_for_speech(
 
     value = " ".join(cleaned_lines)
     value = re.sub(r"\s+", " ", value).strip()
-    return _truncate_sentence(value, max(1, min(10000, int(maximum))))
+    return _truncate_sentence(value, max(1, min(50000, int(maximum))))

@@ -22,7 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.18-edge-expression-fast-20260916`
+> Current build: `2.3.20-live-call-20260916`
 
 ## Features
 
@@ -85,11 +85,17 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
 - Full Edge voice catalog discovery with friendly name, locale, and gender.
 - Provider-aware controls that swap between Browser, Edge, Piper, and Off.
 - Voice preview, stop/cancel, auto-speak, and per-response **SPEAK**.
-- Configurable rate, pitch, volume, maximum spoken characters, and Edge failure fallback.
+- Configurable rate, pitch, volume, maximum spoken characters, and Edge failure fallback. Full-response speech now defaults to a 50,000-character hard ceiling.
 - Edge expression presets: Neutral, Calm, Friendly, Cheerful, Serious, Sad, Angry, Dramatic, Narrator, and local deterministic Auto tone with stronger bounded prosody for clearer audible differences.
 - Adjustable tone intensity plus Off / Natural / Expressive pause styles. Normal punctuation stays in one fast Edge synthesis request; Expressive shapes punctuation for stronger delivery, while bounded `[pause:NNN]` markers provide explicit client-side gaps when exact pauses are needed.
+- Long Edge replies are split at sentence boundaries into roughly 3,200-character chunks. The next chunk is synthesized while the current audio is playing to reduce gaps without changing the fast one-request path for normal replies.
 - Optional skipping of URLs and code blocks.
 - Bounded synthesis queue and sanitization before online Edge synthesis.
+- **Live Call** reuses the active conversation for continuous microphone → STT → Ollama → TTS turns, so typed and spoken messages share the same context.
+- Local-first STT uses optional `faster-whisper` on CPU/int8 with project-owned models under `MatrixFiles/Voice/STT`; `base.en` is the balanced default.
+- Browser/WebView speech recognition is available only as an explicit fallback because the browser/OS may process microphone audio remotely.
+- Live Call provides **MUTE MIC**, **STOP VOICE**, end-call controls, local voice activity detection, bounded 60-second utterances, and local-mode barge-in while the assistant is speaking.
+- Microphone recordings are temporary transcription inputs and are deleted immediately after local STT.
 
 ### Hugging Face GGUF import
 
@@ -189,6 +195,7 @@ CypraStudio/
 ├─ Logs/CypraClean/      Maintenance logs
 ├─ engine/               Runtime, reasoning, retrieval, storage, and security logic
 ├─ tts/                  Voice policy, sanitization, and synthesis services
+├─ stt/                  Local-first live-call transcription service
 ├─ templates/            Desktop Web UI markup
 └─ static/               Desktop Web UI assets
 ```
@@ -213,8 +220,14 @@ CypraStudio is local-first, not universally offline. Normal Ollama chat, local r
 - installing Python dependencies when no compatible offline package source is available;
 - downloading a public GGUF model from Hugging Face;
 - enabling Microsoft Edge neural TTS, preparing its optional Python dependency when absent, loading the voice catalog, and synthesizing speech.
+- preparing the optional local `faster-whisper` dependency/model for Live Call when it is not already bundled or cached; transcription itself stays local.
+- using Browser STT fallback after explicitly enabling its separate microphone privacy permission; the browser/OS controls whether that recognition service is local or remote.
 
 Edge TTS has its own explicit privacy gate. Do not enable it for text you do not want sent to Microsoft’s speech service.
+
+## Scope
+
+This branch intentionally does **not** restore the retired Brain/visual-graph RAG system, Finance workspace, Code Swarm, hidden legacy pages, autonomous Work/tasks system, or old realtime/STT voice workspace. Retrieval is quiet and lexical, Specialists are manually selected, and voice output is isolated from memory and agent routing.
 
 ## License
 

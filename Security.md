@@ -9,7 +9,7 @@ Security fixes are maintained against the current CypraStudio release line. When
 Current documented build:
 
 ```text
-2.3.17-edge-expression-20260916
+2.3.20-live-call-20260916
 ```
 
 Older builds may contain issues already addressed by later runtime, persistence, TTS, or request-boundary hardening.
@@ -34,7 +34,12 @@ CypraStudio currently uses the following protections:
 - Edge neural TTS is disabled unless the user explicitly enables online Edge TTS.
 - If the optional `edge-tts` dependency is missing, runtime preparation is exposed only through a same-origin POST action after that privacy gate is open; voice-catalog GET requests do not install packages.
 - Text is sanitized before optional Edge speech synthesis. Credential-shaped material, internal prompt/context markers, private paths, and configured code/URL content are excluded from online speech requests.
+- Spoken text is capped at a 50,000-character hard ceiling. Long Edge replies are split into bounded synthesis chunks instead of sending one oversized remote request.
 - Piper TTS is designed to run locally and CPU-only so voice output does not compete with the configured local model for GPU VRAM.
+- Live Call defaults to local STT using optional `faster-whisper` on CPU/int8 with model files stored under the project directory.
+- Browser STT fallback is disabled by default and requires a separate explicit privacy opt-in because microphone audio may be processed by a browser/OS speech service.
+- Local microphone uploads are same-origin, file-signature checked, capped at 16 MB and 60 seconds per utterance, written only to a project-local temporary decode file, and deleted immediately after transcription.
+- Ending Live Call releases the in-process local STT model so it does not remain resident unnecessarily.
 - Persistent JSON state uses atomic-write behavior and keeps a last-known-good settings recovery copy.
 
 These controls reduce risk; they do not turn the application, the operating system, third-party models, or optional network services into a formal security boundary.
@@ -46,6 +51,8 @@ Normal local chat is intended to use the private loopback Ollama runtime. CypraS
 - online Python dependency installation when offline setup resources are unavailable;
 - public Hugging Face repository inspection or GGUF downloads;
 - Microsoft Edge neural TTS after its online privacy gate has been enabled, including optional `edge-tts` dependency preparation when the project environment does not already contain it.
+- optional `faster-whisper` package/model download after the user explicitly prepares local STT or starts Live Call; captured speech is still transcribed locally after setup.
+- Browser STT fallback only after its separate opt-in; browser/OS recognition behavior is outside CypraStudio's local processing guarantee.
 
 Browser/device speech and local Piper speech do not require Edge TTS.
 
@@ -101,6 +108,8 @@ When changing CypraStudio, preserve these defaults unless a deliberate design ch
 - project-local model storage;
 - no automatic execution of downloaded repository code;
 - Edge TTS online access off unless explicitly enabled;
+- Browser STT fallback off unless explicitly enabled;
+- local STT microphone input bounded to 60 seconds / 16 MB per utterance and not retained after transcription;
 - bounded request/download sizes;
 - explicit validation at filesystem, HTTP, process, and network boundaries;
 - no silent expansion from local features into remote services.
