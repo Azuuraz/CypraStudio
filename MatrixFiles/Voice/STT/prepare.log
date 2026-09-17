@@ -1,0 +1,8 @@
+CypraStudio local STT preparation
+time=2026-09-17 12:05:55
+python=3.14.7
+executable=C:\Users\steve\Desktop\Matrix2.0\.venv\Scripts\python.exe
+model=base.en
+
+Loading base.en on CPU
+ready
