@@ -68,7 +68,10 @@ class EdgeEngine:
             except asyncio.TimeoutError as exc:
                 last_error = EdgeUnavailable("Edge synthesis timed out")
             except EdgeUnavailable as exc:
-                last_error = exc
+                # These are deterministic response/validation failures (bad
+                # chunks, oversized output, or unusable audio), not transport
+                # failures. Retrying would send the same invalid request again.
+                raise exc
             except Exception as exc:
                 last_error = EdgeUnavailable("Edge connection failed")
             if attempt == 0:
