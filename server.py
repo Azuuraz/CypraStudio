@@ -961,7 +961,10 @@ def tts_edge_plan(body: TTSPlanRequest) -> dict[str, Any]:
     resolved = resolve_tone(requested_tone, safe)
     pause_style = normalize_pause_style(body.pause_style if body.pause_style is not None else settings.get("tts_pause_style"))
     intensity = max(0.0, min(1.0, float(body.intensity if body.intensity is not None else settings.get("tts_intensity", 0.7))))
-    segments = build_speech_plan(safe, style=pause_style, maximum_segments=48, maximum_chunk_chars=3200, first_chunk_chars=400)
+    # Keep Edge requests comfortably below its remote synthesis timeout. Large
+    # dense segments can finish the first request but time out on later ones,
+    # making long speech appear to stop mid-response.
+    segments = build_speech_plan(safe, style=pause_style, maximum_segments=48, maximum_chunk_chars=1200, first_chunk_chars=400)
     if not segments:
         raise HTTPException(422, "Nothing speakable remains after speech planning")
     return {
