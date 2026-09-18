@@ -57,25 +57,11 @@ MODELS: tuple[dict[str, Any], ...] = (
         "description": "Agentic coding and verified software-engineering workflows.",
     },
     {
-        "id": "thinkingmachines/inkling-small:free",
-        "name": "Inkling Small (Free)",
-        "free": True,
-        "context": 1048576,
-        "description": "General reasoning, coding, RAG, tool use, and multimodal understanding.",
-    },
-    {
         "id": "nvidia/nemotron-3-super-120b-a12b:free",
         "name": "Nemotron 3 Super 120B-A12B (Free)",
         "free": True,
         "context": 262144,
         "description": "Efficient agentic reasoning and multi-step task planning.",
-    },
-    {
-        "id": "moonshotai/kimi-k2.5",
-        "name": "Kimi K2.5 (Paid)",
-        "free": False,
-        "context": 262144,
-        "description": "Optional paid heavyweight model. OpenRouter provider pricing applies.",
     },
 )
 
@@ -83,7 +69,6 @@ MODELS: tuple[dict[str, Any], ...] = (
 # unchanged. Preserve old MatrixStudio sessions only for identity-preserving
 # renames; never redirect a retired free model to a paid endpoint.
 LEGACY_MODEL_ALIASES: dict[str, str] = {
-    "thinkingmachines/inkling:free": "thinkingmachines/inkling-small:free",
     "nvidia/nemotron-3-super:free": "nvidia/nemotron-3-super-120b-a12b:free",
 }
 
@@ -123,6 +108,11 @@ def validate_model(slug: str) -> str:
 def model_info(slug: str) -> dict[str, Any] | None:
     clean = str(slug or "").strip()
     return next((dict(row) for row in MODELS if row["id"] == clean), None)
+
+
+def _free_model(slug: str) -> bool:
+    info = model_info(slug)
+    return bool(info and info.get("free"))
 
 
 def _env_key() -> str:
@@ -315,6 +305,7 @@ def stream_chat(
     *,
     model_override: str,
     session_id: str = "",
+    _allow_free_fallback: bool = True,
 ) -> Iterator[tuple[str, str | dict[str, Any]]]:
     if not bool(settings.get("openrouter_allow_online")):
         raise RuntimeError("Online chat is disabled in Runtime settings.")
@@ -346,6 +337,22 @@ def stream_chat(
         stream=True,
         timeout=(10, 600),
     )
+    if (
+        not response.ok
+        and _allow_free_fallback
+        and slug != "openrouter/free"
+        and _free_model(slug)
+        and response.status_code in {429, 502, 503, 504}
+    ):
+        response.close()
+        yield from stream_chat(
+            settings,
+            messages,
+            model_override=encode_model("openrouter/free"),
+            session_id=session_id,
+            _allow_free_fallback=False,
+        )
+        return
     with response as r:
         if not r.ok:
             detail = r.text[:1000]
@@ -365,6 +372,21 @@ def stream_chat(
             item = json.loads(payload)
             if item.get("error"):
                 error = item.get("error")
+                if (
+                    _allow_free_fallback
+                    and slug != "openrouter/free"
+                    and _free_model(slug)
+                    and isinstance(error, dict)
+                    and str(error.get("code") or "") in {"429", "502", "503", "504"}
+                ):
+                    yield from stream_chat(
+                        settings,
+                        messages,
+                        model_override=encode_model("openrouter/free"),
+                        session_id=session_id,
+                        _allow_free_fallback=False,
+                    )
+                    return
                 if isinstance(error, dict):
                     raise RuntimeError(str(error.get("message") or error))
                 raise RuntimeError(str(error))
