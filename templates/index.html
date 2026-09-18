@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#07100d">
   <title>MatrixStudio2.0</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=quiet-rag-2313">
+  <link rel="stylesheet" href="/static/css/style.css?v=openrouter-keyfix-2329">
 </head>
 <body data-theme="matrix" data-mode="dark">
   <div class="workspace-background" aria-hidden="true">
@@ -95,6 +95,15 @@
 
         <section class="messages" id="messages" aria-live="polite"></section>
 
+        <aside class="studio-companion" id="studio-companion" data-mood="neutral" aria-label="Animated studio companion" hidden>
+          <button class="companion-dismiss" id="companion-hide" type="button" aria-label="Hide companion" title="Hide companion">×</button>
+          <div class="companion-click-target" id="companion-react" role="button" tabindex="0" aria-label="Interact with companion" title="Click for a reaction">
+            <div class="companion-stage" aria-hidden="true">
+              <img class="companion-frame" id="companion-frame" src="/static/assets/companion/frames/idle_0.png" width="320" height="490" alt="">
+            </div>
+          </div>
+        </aside>
+
       </div>
 
       <footer class="composer-wrap">
@@ -153,12 +162,43 @@
         <div><span>ACTIVE MODE</span><strong id="specialist-selected-name">Base assistant</strong><small id="specialist-selected-detail">Be accurate, practical, concise, and complete.</small></div>
         <button class="btn ghost small" id="clear-specialist" type="button">USE BASE</button>
       </div>
-      <div class="specialist-search-row"><input id="specialist-search" autocomplete="off" placeholder="Search specialists in the selected group…"><span id="specialist-count">700 local specialists</span></div>
+      <div class="specialist-search-row"><input id="specialist-search" autocomplete="off" placeholder="Search specialists in the selected group…"><button class="btn primary small" id="create-specialist" type="button">+ CREATE SPECIALIST</button><span id="specialist-count">700 local specialists</span></div>
       <div class="specialist-layout">
         <nav class="specialist-groups" id="specialist-groups" aria-label="Specialist groups"></nav>
         <section class="specialist-agents" id="specialist-agents" aria-live="polite"></section>
       </div>
       <div class="specialist-foot"><span>One resident model · one inference path · manual selection only</span><button class="btn ghost" id="specialist-done" type="button">DONE</button></div>
+      <section class="specialist-builder" id="specialist-builder" hidden aria-label="Custom specialist editor">
+        <div class="specialist-builder-head">
+          <div><span class="eyebrow">CUSTOM SPECIALIST</span><h3 id="specialist-builder-title">Create specialist</h3><p>Templates only seed the fields. The saved directive is exactly what gets appended to the base system prompt.</p></div>
+          <button class="icon-btn" id="close-specialist-builder" type="button" aria-label="Close custom specialist editor">×</button>
+        </div>
+        <div class="specialist-builder-body">
+          <div class="specialist-builder-fields">
+            <label class="specialist-field"><span>TEMPLATE</span><select id="specialist-template"></select><small id="specialist-template-detail">Choose a starting structure.</small></label>
+            <label class="specialist-field"><span>NAME</span><input id="specialist-name" maxlength="120" autocomplete="off" placeholder="Systems Cartographer"></label>
+            <label class="specialist-field full"><span>DESCRIPTION</span><input id="specialist-description" maxlength="320" autocomplete="off" placeholder="Short description shown in the specialist browser"></label>
+            <label class="specialist-field"><span>GROUP</span><select id="specialist-group-field"></select></label>
+            <label class="specialist-field full"><span>ROLE / MISSION</span><textarea id="specialist-mission" rows="3" maxlength="1000" placeholder="a specialist focused on..."></textarea></label>
+            <label class="specialist-field full"><span>TONE</span><textarea id="specialist-tone" rows="2" maxlength="1200"></textarea></label>
+            <label class="specialist-field full"><span>APPROACH</span><textarea id="specialist-approach" rows="3" maxlength="1600"></textarea></label>
+            <label class="specialist-field full"><span>STRUCTURE</span><textarea id="specialist-structure" rows="3" maxlength="1600"></textarea></label>
+            <label class="specialist-field full"><span>OUTPUT</span><textarea id="specialist-output" rows="3" maxlength="1600"></textarea></label>
+            <label class="specialist-field full"><span>ADVANCED DIRECTIVE <em>OPTIONAL</em></span><textarea id="specialist-advanced" rows="4" maxlength="2500" placeholder="Extra rules that do not fit the four standard fields"></textarea></label>
+          </div>
+          <aside class="specialist-preview-panel">
+            <div class="specialist-preview-head"><span>LIVE DIRECTIVE</span><small>Exactly what the resident model receives</small></div>
+            <pre id="specialist-directive-preview"></pre>
+          </aside>
+        </div>
+        <div class="specialist-builder-foot">
+          <div class="specialist-builder-danger">
+            <button class="btn ghost small" id="duplicate-specialist" type="button" hidden>DUPLICATE</button>
+            <button class="btn danger small" id="delete-specialist" type="button" hidden>DELETE</button>
+          </div>
+          <div class="specialist-builder-actions"><button class="btn ghost" id="cancel-specialist" type="button">CANCEL</button><button class="btn primary" id="save-specialist" type="button">SAVE SPECIALIST</button></div>
+        </div>
+      </section>
     </div>
   </dialog>
 
@@ -176,9 +216,10 @@
           <button class="settings-tab" data-tab="voice" type="button"><span>03</span> Voice</button>
           <button class="settings-tab" data-tab="reasoning" type="button"><span>04</span> Reasoning</button>
           <button class="settings-tab" data-tab="appearance" type="button"><span>05</span> Appearance</button>
-          <button class="settings-tab" data-tab="data" type="button"><span>06</span> Import / Export</button>
-          <button class="settings-tab" data-tab="advanced" type="button"><span>07</span> Reset / Advanced</button>
-          <button class="settings-tab" data-tab="about" type="button"><span>08</span> About</button>
+          <button class="settings-tab" data-tab="companion" type="button"><span>06</span> Companion</button>
+          <button class="settings-tab" data-tab="data" type="button"><span>07</span> Import / Export</button>
+          <button class="settings-tab" data-tab="advanced" type="button"><span>08</span> Reset / Advanced</button>
+          <button class="settings-tab" data-tab="about" type="button"><span>09</span> About</button>
         </nav>
         <div class="settings-content">
           <section class="settings-page active" data-page="runtime">
@@ -195,12 +236,24 @@
               <div class="runtime-card wide-card"><span>HEALTH</span><strong id="set-runtime-health">—</strong></div>
             </div>
             <div class="field-grid">
-              <label class="field"><span>Chat model</span><select id="set-model"></select><small>Only models in this private project store are selectable.</small></label>
-              <label class="field"><span>Context size</span><select id="set-context"><option value="4096">4K</option><option value="8192">8K</option><option value="16384">16K</option><option value="32768">32K</option><option value="65536">64K</option><option value="131072">128K</option></select><small>Higher context uses more VRAM/RAM.</small></label>
+              <label class="field"><span>Chat provider</span><select id="set-chat-provider"><option value="local">Local Ollama</option><option value="openrouter">OpenRouter online</option></select><small>New chats use this provider. Existing chats stay locked to the model they started with.</small></label>
+              <label class="field"><span>Local model</span><select id="set-model"></select><small>Only models in this private project store are selectable.</small></label>
+              <label class="field"><span>Context size</span><select id="set-context"><option value="4096">4K</option><option value="8192">8K</option><option value="16384">16K</option><option value="32768">32K</option><option value="65536">64K</option><option value="131072">128K</option></select><small>Higher context uses more VRAM/RAM for local models.</small></label>
               <label class="field"><span>Keep alive</span><input id="set-keepalive" placeholder="5m"><small>Examples: 5m, 30m, -1.</small></label>
               <label class="field"><span>Max reply tokens</span><input id="set-num-predict" type="number" min="-1" step="1"><small>-1 lets Ollama/model decide.</small></label>
             </div>
             <div class="button-row"><button class="btn ghost" id="refresh-runtime" type="button">REFRESH</button><button class="btn ghost" id="reconnect-runtime" type="button">RECONNECT</button><button class="btn ghost" id="warm-model" type="button">WARM MODEL</button><button class="btn ghost" id="unload-model" type="button">UNLOAD VRAM</button><button class="btn danger" id="kill-localhost" type="button">KILL HOST</button></div>
+            <section class="online-provider-box" id="openrouter-box">
+              <div class="online-provider-head"><div><span class="eyebrow">OPENROUTER · OPTIONAL ONLINE MODELS</span><strong>Free heavyweight models + Kimi K2.5</strong><p>One OpenRouter account/API key covers every model listed here. Free endpoints have $0 token pricing when available, but rate limits and model availability can change.</p></div><span class="online-provider-badge" id="openrouter-key-badge">NO KEY</span></div>
+              <div class="toggle-list compact-toggle"><label><span><strong>Allow online chat</strong><small>When enabled and an OpenRouter model is selected, the system prompt, specialist directive, retrieval context, recent chat, and your message are sent to the remote model provider.</small></span><input id="set-openrouter-allow-online" type="checkbox"></label></div>
+              <div class="field-grid">
+                <label class="field"><span>Online model</span><select id="set-openrouter-model"></select><small>Models marked FREE have $0 prompt/completion pricing on their current OpenRouter free endpoint. Kimi is optional paid usage.</small></label>
+                <label class="field openrouter-key-field"><span>OpenRouter API key</span><input id="set-openrouter-key" type="password" autocomplete="off" placeholder="sk-or-v1-…"><small id="openrouter-key-status">Not configured</small></label>
+              </div>
+              <div class="button-row"><button class="btn primary" id="save-openrouter-key" type="button">SAVE KEY SECURELY</button><button class="btn ghost" id="test-openrouter-key" type="button">TEST KEY</button><button class="btn ghost" id="clear-openrouter-key" type="button">CLEAR KEY</button></div>
+              <div class="openrouter-action-status" id="openrouter-action-status" role="status" aria-live="polite">Ready for an OpenRouter key.</div>
+              <div class="settings-note online-privacy-note"><strong>Online privacy boundary</strong><span>Local Ollama remains fully private. OpenRouter requests leave this computer. API keys are never stored in normal settings or workspace exports; on Windows, saved keys are protected with the current user's DPAPI credentials.</span></div>
+            </section>
             <div class="model-manager">
               <div class="model-manager-head"><div><strong>Model manager</strong><p>Installed models in this portable store. MatrixStudio keeps one resident model loaded at a time.</p></div><span id="model-manager-summary">—</span></div>
               <div class="model-manager-list" id="model-manager-list"></div>
@@ -373,7 +426,39 @@
               </div>
             </div>
 
-            <div class="toggle-list"><label><span><strong>Reduce motion</strong><small>Suppress nonessential transitions and ambient movement.</small></span><input id="set-reduce-motion" type="checkbox"></label></div>
+            <div class="toggle-list">
+              <label><span><strong>Reduce motion</strong><small>Suppress nonessential transitions and companion movement.</small></span><input id="set-reduce-motion" type="checkbox"></label>
+            </div>
+          </section>
+
+          <section class="settings-page" data-page="companion">
+            <div class="page-title"><div><h3>Studio companion</h3><p>Control the frame-by-frame pet independently from the rest of the interface. Changes preview live and stay local.</p></div><button class="btn ghost small reset-section" data-section="companion" type="button">RESET</button></div>
+            <div class="toggle-list companion-toggle-list">
+              <label><span><strong>Show companion</strong><small>Display the pixel companion in the workspace.</small></span><input id="set-companion-enabled" type="checkbox"></label>
+              <label><span><strong>React to Studio activity</strong><small>Use thinking, generating, listening, speaking, completion, and error animations automatically.</small></span><input id="set-companion-state-reactions" type="checkbox"></label>
+              <label><span><strong>Click reactions</strong><small>Click the pet to trigger a friendly reaction sequence.</small></span><input id="set-companion-click-reactions" type="checkbox"></label>
+            </div>
+
+            <div class="appearance-section">
+              <div class="subsection-title"><div><strong>SIZE & POSITION</strong><span>Placement is pinned to the application window rather than the chat scroll area.</span></div></div>
+              <div class="field-grid companion-control-grid">
+                <label class="field"><span>Pet size <output id="companion-scale-output">100%</output></span><input id="set-companion-scale" type="range" min="0.55" max="1.60" step="0.05"><small>Scales the complete pixel frame uniformly; body proportions never change.</small></label>
+                <label class="field"><span>Dock side</span><select id="set-companion-dock"><option value="right">Bottom right</option><option value="left">Bottom left</option></select><small>Choose which lower corner the companion uses.</small></label>
+                <label class="field"><span>Side offset <output id="companion-side-output">6px</output></span><input id="set-companion-side-offset" type="range" min="0" max="160" step="1"><small>Distance from the selected side of the window.</small></label>
+                <label class="field"><span>Bottom offset <output id="companion-bottom-output">0px</output></span><input id="set-companion-bottom-offset" type="range" min="0" max="220" step="1"><small>Raise the companion above the bottom edge when needed.</small></label>
+                <label class="field"><span>Opacity <output id="companion-opacity-output">100%</output></span><input id="set-companion-opacity" type="range" min="0.35" max="1" step="0.05"></label>
+              </div>
+            </div>
+
+            <div class="appearance-section">
+              <div class="subsection-title"><div><strong>ANIMATION</strong><span>These controls change playback behavior only. The artwork remains the same full-frame pixel character.</span></div></div>
+              <div class="field-grid companion-control-grid">
+                <label class="field"><span>Animation speed <output id="companion-speed-output">1.00×</output></span><input id="set-companion-animation-speed" type="range" min="0.50" max="1.75" step="0.05"><small>Higher values advance frames faster.</small></label>
+                <label class="field"><span>Idle activity</span><select id="set-companion-ambient"><option value="off">Off</option><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="lively">Lively</option></select><small>Controls how often neutral wink, curious, happy, and heart reactions occur. Natural blinking remains separate.</small></label>
+              </div>
+              <div class="settings-note"><strong>Global Reduce Motion still wins.</strong><span>If Reduce Motion is enabled under Appearance, the companion holds a static frame regardless of these animation settings.</span></div>
+              <div class="background-actions"><button class="btn ghost" id="companion-preview-reaction" type="button">PLAY REACTION</button><span id="companion-settings-status">Frame-by-frame · local only</span></div>
+            </div>
           </section>
 
           <section class="settings-page" data-page="data">
@@ -397,6 +482,7 @@
               <button class="reset-card reset-section" data-section="voice" type="button"><strong>Voice</strong><span>Provider, privacy gate, playback behavior, voices, and speech limits.</span></button>
               <button class="reset-card reset-section" data-section="reasoning" type="button"><strong>Reasoning</strong><span>Reasoning mode and Model Think visibility.</span></button>
               <button class="reset-card reset-section" data-section="appearance" type="button"><strong>Appearance</strong><span>Theme, scaling, background, colors, gradients and motion.</span></button>
+              <button class="reset-card reset-section" data-section="companion" type="button"><strong>Companion</strong><span>Visibility, size, dock position, playback speed, and reactions.</span></button>
               <button class="reset-card reset-section" data-section="specialists" type="button"><strong>Specialist selection</strong><span>Return manual specialist mode to the base assistant.</span></button>
             </div>
 
@@ -415,7 +501,7 @@
             <div class="page-title"><div><h3>Clean foundation</h3><p>MatrixStudio2.0 is intentionally smaller than Matrix Studio 1.x.</p></div></div>
             <div class="about-grid">
               <div class="about-block"><strong>INCLUDED</strong><p>Portable launcher, private Ollama runtime, local model store, streaming chat, quiet local retrieval, persistent sessions, guarded voice output, model controls, and UI settings.</p></div>
-              <div class="about-block"><strong>MANUAL SPECIALISTS</strong><p>700 legacy Matrix specialists are available only through the Specialists button. There is no automatic agent routing and no extra agent inference pipeline.</p></div>
+              <div class="about-block"><strong>MANUAL SPECIALISTS</strong><p>700 built-in Matrix specialists plus project-local custom specialists are available through the Specialists button. Custom roles use the same single-model inference path; there is no automatic agent routing or extra agent inference pipeline.</p></div>
               <div class="about-block"><strong>BUILD</strong><p id="build-id">—</p></div>
             </div>
           </section>
@@ -435,6 +521,6 @@
 
   <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
 
-  <script src="/static/js/app.js?v=edge-segment-reliability-2322"></script>
+  <script src="/static/js/app.js?v=openrouter-keyfix-2329"></script>
 </body>
 </html>

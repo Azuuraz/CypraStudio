@@ -1,0 +1,308 @@
+{
+  "version": 3,
+  "mode": "frame_by_frame",
+  "source": "user_reference_sheet_20260918",
+  "frame_size": [
+    320,
+    490
+  ],
+  "render_size": [
+    128,
+    196
+  ],
+  "notes": "Whole-character pixel frames only. Additional lively frames are exact reference-preserving whole-frame pixel translations; no skeletal transforms, limb pivots, tweening, or body-part interpolation are used at runtime.",
+  "animations": {
+    "neutral": {
+      "loop": true,
+      "frames": [
+        "frames/idle_0.png",
+        "frames/idle_1.png",
+        "frames/idle_2.png",
+        "frames/idle_3.png",
+        "frames/idle_4.png",
+        "frames/idle_5.png",
+        "frames/idle_6.png",
+        "frames/idle_7.png"
+      ],
+      "durations_ms": [
+        720,
+        180,
+        180,
+        180,
+        180,
+        180,
+        180,
+        620
+      ]
+    },
+    "blink": {
+      "loop": false,
+      "frames": [
+        "frames/idle_0.png",
+        "frames/blink_0.png",
+        "frames/blink_1.png",
+        "frames/blink_0.png",
+        "frames/idle_0.png"
+      ],
+      "durations_ms": [
+        75,
+        95,
+        80,
+        90,
+        110
+      ]
+    },
+    "thinking": {
+      "loop": true,
+      "loop_start": 3,
+      "frames": [
+        "frames/side_0.png",
+        "frames/side_1.png",
+        "frames/side_2.png",
+        "frames/side_3.png",
+        "frames/side_4.png",
+        "frames/side_5.png",
+        "frames/side_6.png"
+      ],
+      "durations_ms": [
+        90,
+        100,
+        110,
+        460,
+        460,
+        460,
+        560
+      ]
+    },
+    "curious": {
+      "loop": false,
+      "frames": [
+        "frames/side_0.png",
+        "frames/side_1.png",
+        "frames/side_2.png",
+        "frames/side_3.png",
+        "frames/side_4.png",
+        "frames/side_5.png",
+        "frames/side_6.png"
+      ],
+      "durations_ms": [
+        180,
+        150,
+        150,
+        220,
+        260,
+        300,
+        420
+      ]
+    },
+    "generating": {
+      "loop": true,
+      "frames": [
+        "frames/wink_0.png",
+        "frames/wink_1.png",
+        "frames/wink_2.png",
+        "frames/wink_3.png",
+        "frames/wink_4.png",
+        "frames/wink_5.png",
+        "frames/wink_6.png"
+      ],
+      "durations_ms": [
+        210,
+        120,
+        110,
+        105,
+        110,
+        125,
+        300
+      ]
+    },
+    "listening": {
+      "loop": true,
+      "frames": [
+        "frames/idle_0.png",
+        "frames/idle_1.png",
+        "frames/idle_2.png",
+        "frames/idle_3.png",
+        "frames/idle_4.png",
+        "frames/idle_5.png",
+        "frames/idle_6.png",
+        "frames/idle_7.png"
+      ],
+      "durations_ms": [
+        420,
+        170,
+        170,
+        170,
+        170,
+        170,
+        170,
+        420
+      ]
+    },
+    "speaking": {
+      "loop": true,
+      "frames": [
+        "frames/cheer_0.png",
+        "frames/cheer_1.png",
+        "frames/cheer_2.png",
+        "frames/cheer_3.png",
+        "frames/cheer_4.png",
+        "frames/cheer_5.png",
+        "frames/cheer_6.png"
+      ],
+      "durations_ms": [
+        115,
+        100,
+        90,
+        85,
+        90,
+        100,
+        155
+      ]
+    },
+    "happy": {
+      "loop": true,
+      "frames": [
+        "frames/cheer_0.png",
+        "frames/cheer_1.png",
+        "frames/cheer_2.png",
+        "frames/cheer_3.png",
+        "frames/cheer_4.png",
+        "frames/cheer_5.png",
+        "frames/cheer_6.png"
+      ],
+      "durations_ms": [
+        170,
+        135,
+        115,
+        105,
+        115,
+        135,
+        300
+      ]
+    },
+    "heart": {
+      "loop": true,
+      "frames": [
+        "frames/heart_0.png",
+        "frames/heart_1.png",
+        "frames/heart_2.png",
+        "frames/heart_3.png",
+        "frames/heart_4.png",
+        "frames/heart_5.png",
+        "frames/heart_6.png",
+        "frames/heart_7.png",
+        "frames/heart_8.png"
+      ],
+      "durations_ms": [
+        220,
+        160,
+        150,
+        150,
+        170,
+        150,
+        150,
+        160,
+        300
+      ]
+    },
+    "wink": {
+      "loop": false,
+      "frames": [
+        "frames/wink_0.png",
+        "frames/wink_1.png",
+        "frames/wink_2.png",
+        "frames/wink_3.png",
+        "frames/wink_4.png",
+        "frames/wink_5.png",
+        "frames/wink_6.png"
+      ],
+      "durations_ms": [
+        190,
+        130,
+        110,
+        105,
+        115,
+        140,
+        430
+      ]
+    },
+    "error": {
+      "loop": true,
+      "frames": [
+        "frames/shy_0.png",
+        "frames/shy_1.png",
+        "frames/shy_2.png",
+        "frames/shy_3.png",
+        "frames/shy_4.png",
+        "frames/shy_5.png",
+        "frames/shy_6.png"
+      ],
+      "durations_ms": [
+        340,
+        260,
+        240,
+        240,
+        240,
+        260,
+        420
+      ]
+    },
+    "bashful": {
+      "loop": false,
+      "frames": [
+        "frames/shy_0.png",
+        "frames/shy_1.png",
+        "frames/shy_2.png",
+        "frames/shy_3.png",
+        "frames/shy_4.png",
+        "frames/shy_5.png",
+        "frames/shy_6.png"
+      ],
+      "durations_ms": [
+        240,
+        190,
+        180,
+        210,
+        220,
+        240,
+        420
+      ]
+    },
+    "sleepy": {
+      "loop": true,
+      "frames": [
+        "frames/sleep_0.png",
+        "frames/sleep_1.png",
+        "frames/sleep_2.png",
+        "frames/sleep_3.png",
+        "frames/sleep_4.png",
+        "frames/sleep_5.png",
+        "frames/sleep_6.png"
+      ],
+      "durations_ms": [
+        680,
+        520,
+        500,
+        500,
+        560,
+        520,
+        760
+      ]
+    }
+  },
+  "ambient": {
+    "enabled_when_neutral": true,
+    "delay_ms": [
+      11000,
+      20000
+    ],
+    "reactions": [
+      "wink",
+      "curious",
+      "happy",
+      "heart"
+    ]
+  },
+  "source_sha256": "7d27c34006e7afe07adb58cb30a0ad96b5219bfe3de7834e3a401308e0af2e6e"
+}

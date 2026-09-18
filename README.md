@@ -8,7 +8,7 @@ CypraStudio is a portable, privacy-first Windows AI workspace powered by Ollama,
 
 ## About CypraStudio
 
-**CypraStudio** is a local-first Windows desktop AI workspace built for private, portable use with Ollama. It combines a native WebView2 interface, project-owned model storage, streaming conversations, configurable reasoning, lightweight local retrieval, specialist profiles, voice output, model management, and extensive appearance controls in one self-contained Studio. The application is designed so the primary chat path remains local: prompts are sent to a loopback-only Ollama runtime, models are stored under the project’s own `OllamaModels` directory, conversations and settings remain in project-local data, and the desktop interface talks only to its local FastAPI backend. Online behavior is limited and explicit. Public Hugging Face GGUF downloads occur only when the user requests a model import, and Microsoft Edge neural TTS is protected by a separate opt-in privacy gate. Browser/device speech and local Piper speech remain available without using Edge TTS.
+**CypraStudio** is a local-first Windows desktop AI workspace built for private, portable use with Ollama. It combines a native WebView2 interface, project-owned model storage, streaming conversations, configurable reasoning, lightweight local retrieval, specialist profiles, voice output, model management, and extensive appearance controls in one self-contained Studio. The application is designed so the primary chat path remains local: prompts are sent to a loopback-only Ollama runtime, models are stored under the project’s own `OllamaModels` directory, conversations and settings remain in project-local data, and the desktop interface talks only to its local FastAPI backend. Online behavior is limited and explicit. Optional OpenRouter chat, public Hugging Face GGUF downloads, and Microsoft Edge neural TTS each require deliberate user action; OpenRouter chat and Edge TTS have separate privacy gates. Browser/device speech and local Piper speech remain available without using Edge TTS.
 
 CypraStudio focuses on a clean single-user desktop workflow rather than a background autonomous-agent system. Chats support streaming, stop/retry, message editing, response regeneration, reasoning modes, per-conversation generation locking, saved drafts, pinned sessions, search, export, recovery, and local cross-chat recall. Its retrieval layer intentionally stays lightweight: SQLite FTS5 indexes supported files from the local `Knowledge` folder and saved conversations without running a separate embedding model or visual memory graph. A manual Specialists browser exposes the Studio’s role registry without silently routing prompts through agents.
 
@@ -22,7 +22,9 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.20-live-call-20260916`
+> Current build: `2.3.29-openrouter-keyfix-20260918`
+
+OpenRouter key controls now report save/test/clear results directly inside Runtime settings, and Windows DPAPI calls use explicit Win32 ctypes signatures for reliable secure key persistence.
 
 ## Features
 
@@ -36,6 +38,16 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
 - Configurable context size, keep-alive, reply-token limit, and model selection.
 - GPU-first behavior for the factory model and imported Hugging Face GGUF models, with controlled partial-offload fallback when required.
 - Memory-mapped loading for supported partial/CPU-resident paths.
+
+### Optional OpenRouter online models
+
+- One OpenRouter API key can be used for every curated online model in Studio.
+- Online chat is **off by default** and has its own explicit privacy gate.
+- Curated free choices include OpenRouter's automatic free router plus GLM 5.3 Flash, DeepSeek V4 Flash 0731, Qwen3 235B-A22B Instruct 2507, Nemotron 3 Ultra, Nex-N2.5-Pro, Inkling, and Nemotron 3 Super free endpoints.
+- Optional paid Kimi K2.5 is available through the same provider selector.
+- Existing chats remain locked to the model they started with; local and online models can coexist in the new-chat model selector.
+- OpenRouter keys are never written to normal settings or workspace exports. On Windows, keys saved through Studio are protected with the current user's DPAPI credentials; `OPENROUTER_API_KEY` is also supported.
+- `openrouter/free` is the default online selection because it can route to an available free model when individual free endpoints change.
 
 ### Chat and reasoning
 
@@ -74,6 +86,9 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
 
 - Manual Specialists browser backed by the Studio role registry.
 - Group browsing and explicit specialist selection.
+- Built-in **Create Specialist** editor with Blank, General Expert, Coding/Engineering, Research/Analysis, Creative/Design, Security, and Business/Strategy templates.
+- Custom specialists persist separately in project-local `data/custom_specialists.json`, appear under **My Specialists** and their assigned built-in group, and can be edited, duplicated, or deleted without modifying the 700 built-in roles.
+- Live directive preview shows the exact `You are ... / Operating Rules` prompt appended to the base system prompt.
 - No automatic agent routing or hidden autonomous task execution.
 - Default system prompt remains active when no specialist is selected.
 
@@ -116,6 +131,8 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
 - Custom primary/secondary accents, canvas, panels, messages, and muted text colors.
 - Interface gradients and adjustable strength.
 - UI scale, chat scale, density, panel opacity, glass blur, glow, and motion controls.
+- Frame-by-frame pixel companion rebuilt from the supplied full-character reference sheet. The pet now ships with 54 registration-locked whole-character frames, slower thinking entry/hold behavior, smoother idle/breathing motion, and occasional neutral-state wink/curious/happy/heart reactions so she feels more alive without changing her outfit or appearance. The runtime never rotates, scales, or interpolates individual body parts.
+- Companion controls now have a dedicated Settings page with live size, left/right docking, side/bottom offsets, opacity, animation speed, idle activity frequency, click reactions, and automatic Studio-state reactions. Defaults remain compact at the bottom-right edge (`128×196` desktop render target before user scaling).
 - PNG, JPEG, and WebP custom backgrounds stored locally.
 - Aspect-correct background composition with optional edge-fill blur.
 - Independent image opacity and neutral darken/wash controls.

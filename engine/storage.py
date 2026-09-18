@@ -21,9 +21,12 @@ UI_STATE_PATH = DATA / "ui_state.json"
 _LOCK = threading.RLock()
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "settings_schema": 14,
+    "settings_schema": 17,
     "port": 8765,
     "ollama_chat_model": "llama3.2:3b",
+    "chat_provider": "local",
+    "openrouter_allow_online": False,
+    "openrouter_chat_model": "openrouter/free",
     "ollama_num_ctx": 8192,
     "ollama_keep_alive": "5m",
     "ollama_num_predict": -1,
@@ -92,6 +95,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "ui_font_scale": 1.0,
     "chat_font_scale": 1.0,
     "reduce_motion": False,
+    "companion_enabled": True,
+    "companion_scale": 1.0,
+    "companion_dock": "right",
+    "companion_side_offset": 6,
+    "companion_bottom_offset": 0,
+    "companion_opacity": 1.0,
+    "companion_animation_speed": 1.0,
+    "companion_ambient_mode": "normal",
+    "companion_click_reactions": True,
+    "companion_state_reactions": True,
     "window_width": 1440,
     "window_height": 900,
 }
@@ -158,6 +171,14 @@ def _coerce_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
         out["history_turns"] = max(1, min(64, int(out["history_turns"])))
     except Exception:
         out["history_turns"] = DEFAULT_SETTINGS["history_turns"]
+    provider = str(out.get("chat_provider") or "local").lower().strip()
+    out["chat_provider"] = provider if provider in {"local", "openrouter"} else "local"
+    openrouter_model = str(out.get("openrouter_chat_model") or "openrouter/free").strip()
+    try:
+        from engine import openrouter as _openrouter
+        out["openrouter_chat_model"] = _openrouter.validate_model(openrouter_model)
+    except Exception:
+        out["openrouter_chat_model"] = "openrouter/free"
     think_mode = str(out["think_mode"]).lower()
     if think_mode == "on":
         think_mode = "standard"
@@ -181,7 +202,27 @@ def _coerce_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
             out[key] = max(floor, int(out[key]))
         except Exception:
             out[key] = DEFAULT_SETTINGS[key]
-    for key in ("show_model_thinking", "plain_chat", "show_generation_stats", "show_message_model", "auto_title_chats", "confirm_delete_chat", "retrieval_enabled", "retrieval_include_knowledge", "retrieval_include_older_chat", "retrieval_include_cross_chat", "reduce_motion", "custom_colors_enabled", "background_image_enabled", "voice_output_enabled", "tts_allow_online", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_stop_previous", "stt_allow_browser_online"):
+    try:
+        out["companion_scale"] = max(0.55, min(1.60, float(out.get("companion_scale", 1.0))))
+    except Exception:
+        out["companion_scale"] = 1.0
+    out["companion_dock"] = "left" if str(out.get("companion_dock", "right")).lower() == "left" else "right"
+    for key, low, high in (("companion_side_offset", 0, 160), ("companion_bottom_offset", 0, 220)):
+        try:
+            out[key] = max(low, min(high, int(out.get(key, DEFAULT_SETTINGS[key]))))
+        except Exception:
+            out[key] = DEFAULT_SETTINGS[key]
+    try:
+        out["companion_opacity"] = max(0.35, min(1.0, float(out.get("companion_opacity", 1.0))))
+    except Exception:
+        out["companion_opacity"] = 1.0
+    try:
+        out["companion_animation_speed"] = max(0.50, min(1.75, float(out.get("companion_animation_speed", 1.0))))
+    except Exception:
+        out["companion_animation_speed"] = 1.0
+    ambient_mode = str(out.get("companion_ambient_mode", "normal")).lower()
+    out["companion_ambient_mode"] = ambient_mode if ambient_mode in {"off", "quiet", "normal", "lively"} else "normal"
+    for key in ("openrouter_allow_online", "show_model_thinking", "plain_chat", "show_generation_stats", "show_message_model", "auto_title_chats", "confirm_delete_chat", "retrieval_enabled", "retrieval_include_knowledge", "retrieval_include_older_chat", "retrieval_include_cross_chat", "reduce_motion", "companion_enabled", "companion_click_reactions", "companion_state_reactions", "custom_colors_enabled", "background_image_enabled", "voice_output_enabled", "tts_allow_online", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_stop_previous", "stt_allow_browser_online"):
         out[key] = _as_bool(out[key])
     out["tts_provider"] = normalize_provider(out.get("tts_provider"))
     out["tts_edge_voice"] = normalize_edge_voice(out.get("tts_edge_voice"))
@@ -280,7 +321,7 @@ def _coerce_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     out["system_prompt"] = prompt
     specialist = str(out.get("selected_specialist_id") or "").strip().lower()
     out["selected_specialist_id"] = "".join(ch for ch in specialist if ch.isalnum() or ch in "-_")[:120]
-    out["settings_schema"] = 13
+    out["settings_schema"] = 17
     return out
 
 
@@ -327,12 +368,13 @@ def update_settings(patch: dict[str, Any]) -> dict[str, Any]:
 
 def reset_settings(section: str = "all") -> dict[str, Any]:
     groups = {
-        "runtime": {"port", "ollama_chat_model", "ollama_num_ctx", "ollama_keep_alive", "ollama_num_predict"},
+        "runtime": {"port", "ollama_chat_model", "chat_provider", "openrouter_allow_online", "openrouter_chat_model", "ollama_num_ctx", "ollama_keep_alive", "ollama_num_predict"},
         "chat": {"chat_temperature", "history_turns", "plain_chat", "show_generation_stats", "show_message_model", "auto_title_chats", "confirm_delete_chat", "system_prompt", "retrieval_enabled", "retrieval_include_knowledge", "retrieval_include_older_chat", "retrieval_include_cross_chat", "retrieval_max_chunks", "retrieval_max_chars"},
         "voice": {"voice_output_enabled", "tts_provider", "tts_allow_online", "tts_edge_voice", "tts_local_voice", "tts_online_fallback", "tts_rate", "tts_pitch", "tts_volume", "tts_tone", "tts_intensity", "tts_pause_style", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_max_chars", "tts_stop_previous", "tts_cpu_threads", "stt_provider", "stt_allow_browser_online", "stt_local_model", "stt_max_seconds"},
         "reasoning": {"think_mode", "show_model_thinking"},
         "specialists": {"selected_specialist_id"},
         "appearance": {"ui_mode", "theme_preset", "ui_density", "ui_font_scale", "chat_font_scale", "reduce_motion", "window_width", "window_height", "custom_colors_enabled", "accent_color", "accent_secondary", "background_color", "panel_color", "user_bubble_color", "assistant_bubble_color", "muted_text_color", "background_image_enabled", "background_image_version", "background_image_opacity", "background_blur", "background_dim", "background_zoom", "background_fit", "gradients_enabled", "gradient_strength", "panel_opacity", "panel_blur", "glow_strength"},
+        "companion": {"companion_enabled", "companion_scale", "companion_dock", "companion_side_offset", "companion_bottom_offset", "companion_opacity", "companion_animation_speed", "companion_ambient_mode", "companion_click_reactions", "companion_state_reactions"},
     }
     with _LOCK:
         if section == "all":

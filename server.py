@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from engine import llm, agents, reasoning, retrieval, huggingface as hf
+from engine import llm, agents, reasoning, retrieval, huggingface as hf, openrouter
 from engine.security import host_header_is_loopback, origin_matches_request, security_headers, valid_image_signature
 from tts import LocalTTSService
 from tts.service import TTSCancelled
@@ -51,7 +51,7 @@ from engine.storage import (
 )
 
 ROOT = Path(__file__).resolve().parent
-BUILD_ID = "2.3.22-stt-download-timeout-20260916"
+BUILD_ID = "2.3.29-openrouter-keyfix-20260918"
 APP_ID = "matrixstudio2-local"
 INSTANCE_ID = os.environ.get("MATRIXSTUDIO2_INSTANCE_ID", "matrixstudio2-dev")
 BACKGROUND_DIR = ROOT / "data" / "background"
@@ -339,6 +339,10 @@ class PullBody(BaseModel):
     model: str
 
 
+class OpenRouterKeyBody(BaseModel):
+    api_key: str = Field(min_length=20, max_length=512)
+
+
 class HFInstallBody(BaseModel):
     repo_id: str = Field(min_length=3, max_length=240)
     revision: str = Field(min_length=4, max_length=160)
@@ -371,6 +375,16 @@ class TTSStopRequest(BaseModel):
     release: bool = False
 
 
+def _default_chat_model(settings: dict[str, Any]) -> str:
+    if str(settings.get("chat_provider") or "local").lower() == "openrouter":
+        slug = str(settings.get("openrouter_chat_model") or "openrouter/free").strip()
+        try:
+            return openrouter.encode_model(openrouter.validate_model(slug))
+        except ValueError:
+            return openrouter.encode_model("openrouter/free")
+    return str(settings.get("ollama_chat_model") or "").strip()
+
+
 def _reconcile_model(settings: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """Keep persisted model selection aligned with this project's actual store."""
     resolved = llm.resolve_model(settings, force=True)
@@ -397,6 +411,7 @@ def state() -> dict[str, Any]:
         "build_id": BUILD_ID,
         "settings": settings,
         "runtime": llm.runtime_status(settings),
+        "openrouter": openrouter.public_status(settings),
         "sessions": list_sessions(),
         "ui_state": load_ui_state(),
     }
@@ -431,6 +446,63 @@ def specialists_list(group: str = "", q: str = "", limit: int = 200) -> dict[str
         "agents": agents.list_agents(group=group or None, search=q or None, limit=limit),
         "mode": "manual_only",
     }
+
+
+@app.get("/api/specialists/templates")
+def specialists_templates() -> dict[str, Any]:
+    return {"templates": agents.list_templates(), "groups": agents.editable_groups()}
+
+
+def _specialist_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, KeyError):
+        return HTTPException(404, str(exc).strip("'"))
+    return HTTPException(400, str(exc))
+
+
+@app.post("/api/specialists/custom")
+async def specialists_custom_create(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object(request, maximum=64 * 1024, label="Custom specialist body")
+    try:
+        return {"agent": agents.create_custom_agent(payload)}
+    except (ValueError, KeyError) as exc:
+        raise _specialist_error(exc) from exc
+
+
+@app.get("/api/specialists/custom/{agent_id}")
+def specialists_custom_get(agent_id: str) -> dict[str, Any]:
+    row = agents.get_custom_agent(agent_id)
+    if not row:
+        raise HTTPException(404, "Custom specialist not found")
+    return {"agent": row}
+
+
+@app.put("/api/specialists/custom/{agent_id}")
+async def specialists_custom_update(agent_id: str, request: Request) -> dict[str, Any]:
+    payload = await _read_json_object(request, maximum=64 * 1024, label="Custom specialist body")
+    try:
+        return {"agent": agents.update_custom_agent(agent_id, payload)}
+    except (ValueError, KeyError) as exc:
+        raise _specialist_error(exc) from exc
+
+
+@app.post("/api/specialists/custom/{agent_id}/duplicate")
+def specialists_custom_duplicate(agent_id: str) -> dict[str, Any]:
+    try:
+        return {"agent": agents.duplicate_custom_agent(agent_id)}
+    except (ValueError, KeyError) as exc:
+        raise _specialist_error(exc) from exc
+
+
+@app.delete("/api/specialists/custom/{agent_id}")
+def specialists_custom_delete(agent_id: str) -> dict[str, Any]:
+    try:
+        agents.delete_custom_agent(agent_id)
+    except (ValueError, KeyError) as exc:
+        raise _specialist_error(exc) from exc
+    settings = load_settings()
+    if str(settings.get("selected_specialist_id") or "").lower() == str(agent_id or "").lower():
+        update_settings({"selected_specialist_id": ""})
+    return {"ok": True}
 
 
 @app.post("/api/settings")
@@ -664,6 +736,37 @@ def llm_status() -> dict[str, Any]:
     return llm.runtime_status(settings)
 
 
+@app.get("/api/openrouter/status")
+def openrouter_status() -> dict[str, Any]:
+    return openrouter.public_status(load_settings())
+
+
+@app.post("/api/openrouter/key")
+def openrouter_key_save(body: OpenRouterKeyBody) -> dict[str, Any]:
+    try:
+        openrouter.save_api_key(body.api_key)
+        return {"ok": True, "status": openrouter.public_status(load_settings())}
+    except (ValueError, RuntimeError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/api/openrouter/key")
+def openrouter_key_delete() -> dict[str, Any]:
+    try:
+        openrouter.delete_api_key()
+        return {"ok": True, "status": openrouter.public_status(load_settings())}
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post("/api/openrouter/test")
+def openrouter_key_test() -> dict[str, Any]:
+    try:
+        return openrouter.test_api_key()
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
 @app.get("/api/llm/models")
 def llm_models() -> dict[str, Any]:
     return {"models": llm.list_models(force=True)}
@@ -786,7 +889,7 @@ def _hydrate_session_generation(session: dict[str, Any], *, persist: bool = True
     settings = load_settings()
     profile = infer_session_generation_profile(
         session,
-        default_model=str(settings.get("ollama_chat_model") or ""),
+        default_model=_default_chat_model(settings),
         default_think_mode=str(settings.get("think_mode") or "auto"),
     )
     if session.get("generation_profile") != profile:
@@ -1060,7 +1163,7 @@ def sessions_create(body: SessionCreate) -> dict[str, Any]:
     settings = load_settings()
     session = new_session(
         body.title.strip() or "New chat",
-        model=str(settings.get("ollama_chat_model") or ""),
+        model=_default_chat_model(settings),
         think_mode=str(settings.get("think_mode") or "auto"),
     )
     return {"session": session}
@@ -1093,10 +1196,16 @@ def sessions_generation_patch(sid: str, body: SessionGenerationPatch) -> dict[st
 
     model = body.model
     if model is not None:
-        canonical = _canonical_installed_model(model)
-        if not canonical:
-            raise HTTPException(409, "That model is not available in the project-local model store.")
-        model = canonical
+        if openrouter.is_openrouter_model(model):
+            try:
+                openrouter.validate_model(openrouter.decode_model(model))
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        else:
+            canonical = _canonical_installed_model(model)
+            if not canonical:
+                raise HTTPException(409, "That model is not available in the project-local model store.")
+            model = canonical
     think_mode = body.think_mode
     if think_mode is not None:
         think_mode = str(think_mode).lower().strip()
@@ -1182,6 +1291,14 @@ def _prompt_messages(session: dict[str, Any], settings: dict[str, Any], user_tex
 
 def _friendly_generation_error(exc: Exception) -> tuple[str, str]:
     raw = str(exc or "").lower()
+    if "openrouter" in raw:
+        if "401" in raw or "api key" in raw or "unauthorized" in raw:
+            return "openrouter_auth", "OpenRouter rejected the configured API key. Update it in Runtime settings."
+        if "429" in raw or "rate limit" in raw:
+            return "openrouter_rate_limit", "The selected OpenRouter endpoint is rate-limited right now. Retry or choose another online model."
+        if "timeout" in raw or "timed out" in raw:
+            return "openrouter_timeout", "The online model timed out. Retry the response or choose another OpenRouter model."
+        return "openrouter_generation", "The OpenRouter model could not finish this response. Retry or choose another online model."
     if any(key in raw for key in ("connection refused", "failed to establish", "max retries", "connection aborted", "connection reset")):
         return "runtime_offline", "The local model runtime disconnected. Retry after MatrixStudio reconnects it."
     if "gpu-only policy" in raw or "100% gpu residency" in raw:
@@ -1221,17 +1338,25 @@ def _stream_turn(
         thinking: list[str] = []
         stats: dict[str, Any] = {}
         allow_thinking_trace = str(effective_reasoning or "").lower() != "direct"
+        online = openrouter.is_openrouter_model(model)
+        display_model = openrouter.decode_model(model) if online else model
         yield json.dumps({
             "type": "meta",
             "session_id": session["id"],
             "title": session["title"],
-            "model": model,
+            "model": display_model,
+            "provider": "openrouter" if online else "local",
             "reasoning_mode": requested_reasoning,
             "effective_reasoning_mode": effective_reasoning,
             "reasoning_label": reasoning.display_label(requested_reasoning, effective_reasoning),
         }) + "\n"
         try:
-            for kind, payload in llm.stream_chat(settings, prompt, model_override=model):
+            iterator = (
+                openrouter.stream_chat(settings, prompt, model_override=model, session_id=session["id"])
+                if online else
+                llm.stream_chat(settings, prompt, model_override=model)
+            )
+            for kind, payload in iterator:
                 if kind == "content":
                     answer.append(str(payload))
                     yield json.dumps({"type": "content", "text": payload}, ensure_ascii=False) + "\n"
@@ -1252,7 +1377,7 @@ def _stream_turn(
                 "content": "".join(answer).strip(),
                 "thinking": "".join(thinking).strip() if thinking else "",
                 "stats": stats,
-                "model": model,
+                "model": display_model,
                 "reasoning_mode": requested_reasoning,
                 "effective_reasoning_mode": effective_reasoning,
                 "created_at": time.time(),
@@ -1284,11 +1409,33 @@ def _resolve_turn_runtime(session: dict[str, Any]) -> tuple[dict[str, Any], str]
     session = _hydrate_session_generation(session)
     profile = dict(session.get("generation_profile") or {})
     requested_model = str(profile.get("model") or "").strip()
+
+    if openrouter.is_openrouter_model(requested_model):
+        try:
+            slug = openrouter.validate_model(openrouter.decode_model(requested_model))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not bool(settings.get("openrouter_allow_online")):
+            raise HTTPException(409, "Online chat is disabled. Enable OpenRouter in Runtime settings for this chat.")
+        if not openrouter.key_status().get("configured"):
+            raise HTTPException(409, "OpenRouter needs an API key. Add one in Runtime settings before using an online model.")
+        turn_settings = dict(settings)
+        turn_settings["chat_provider"] = "openrouter"
+        turn_settings["openrouter_chat_model"] = slug
+        turn_settings["think_mode"] = str(profile.get("think_mode") or settings.get("think_mode") or "auto").lower()
+        return turn_settings, requested_model
+
     model = _canonical_installed_model(requested_model) if requested_model else None
     if not model:
         # An empty, not-yet-started chat may recover from a changed default. An
         # established chat must never silently jump to a different base model.
         if not session.get("messages") and not profile.get("locked"):
+            default_model = _default_chat_model(settings)
+            if openrouter.is_openrouter_model(default_model):
+                profile["model"] = default_model
+                session["generation_profile"] = profile
+                save_session(session)
+                return _resolve_turn_runtime(session)
             model = llm.resolve_model(settings, force=True)
             if model:
                 profile["model"] = model
@@ -1297,12 +1444,13 @@ def _resolve_turn_runtime(session: dict[str, Any]) -> tuple[dict[str, Any], str]
         if not model:
             status = llm.runtime_status(settings)
             if not status.get("ok"):
-                raise HTTPException(503, "The local model runtime is offline. Use Reconnect and retry.")
+                raise HTTPException(503, "The local model runtime is offline. Use Reconnect and retry, or choose an online model.")
             if requested_model:
                 raise HTTPException(409, f"This chat is locked to {requested_model}, but that model is no longer installed. Restore it or start a new chat.")
-            raise HTTPException(409, f"No local model is installed. Install {llm.STARTER_MODEL} or another Ollama model in Runtime settings.")
+            raise HTTPException(409, f"No local model is installed. Install {llm.STARTER_MODEL} or choose an OpenRouter model.")
 
     turn_settings = dict(settings)
+    turn_settings["chat_provider"] = "local"
     turn_settings["ollama_chat_model"] = model
     turn_settings["think_mode"] = str(profile.get("think_mode") or settings.get("think_mode") or "auto").lower()
     return turn_settings, model
@@ -1314,7 +1462,7 @@ def chat(body: ChatBody):
     if not session:
         defaults = load_settings()
         session = new_session(
-            model=str(defaults.get("ollama_chat_model") or ""),
+            model=_default_chat_model(defaults),
             think_mode=str(defaults.get("think_mode") or "auto"),
         )
     settings, model = _resolve_turn_runtime(session)

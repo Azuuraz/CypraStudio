@@ -2,12 +2,13 @@
   const $ = (q) => document.querySelector(q);
   const $$ = (q) => [...document.querySelectorAll(q)];
   const state = {
-    settings: {}, runtime: {}, sessions: [], session: null, uiState: {},
+    settings: {}, runtime: {}, openrouter: {configured:false,models:[]}, sessions: [], session: null, uiState: {},
     abort: null, dirty: false, pullTimer: null, runtimeWatchTimer: null, search: '', uiStateTimer: null, sessionViewTimer: null, settingsSaveTimer: null, settingsSaveSeq: 0, lastRenderedSessionId: '', lastChatSessionId: '', commandIndex: 0, sessionMenu: null, toastTimer: null,
-    specialistGroups: [], specialistAgents: [], specialistGroup: '', selectedSpecialist: null, generationPhase: 'ready', controlMenu: null, heroExitActive: false,
+    specialistGroups: [], specialistAgents: [], specialistGroup: '', selectedSpecialist: null, specialistTemplates: [], specialistEditableGroups: [], specialistEditingId: '', generationPhase: 'ready', controlMenu: null, heroExitActive: false,
     hfRepo: null, hfGroups: [], hfSelectedGroup: '', hfPollTimer: null, shutdownActive: false,
     ttsAbort: null, ttsAudio: null, ttsAudioUrl: '', ttsToken: 0, ttsPlaying: false, edgeVoicesLoaded: false, edgeVoicesLoading: false,
-    liveCall: {active:false, muted:false, state:'IDLE', mode:'local', stream:null, audioContext:null, analyser:null, source:null, vadTimer:null, recorder:null, chunks:[], recorderDiscard:false, speechHeard:false, lastVoiceAt:0, recordingStartedAt:0, browserRecognition:null, browserRestartTimer:null, processing:false, generation:0, speakerStartedAt:0, bargeFrames:0}
+    liveCall: {active:false, muted:false, state:'IDLE', mode:'local', stream:null, audioContext:null, analyser:null, source:null, vadTimer:null, recorder:null, chunks:[], recorderDiscard:false, speechHeard:false, lastVoiceAt:0, recordingStartedAt:0, browserRecognition:null, browserRestartTimer:null, processing:false, generation:0, speakerStartedAt:0, bargeFrames:0},
+    companion: {overrideMood:'', overrideTimer:null, blinkTimer:null, ambientTimer:null, frameTimer:null, animationKey:'', frameIndex:0, preloadDone:false}
   };
 
   async function api(path, opts = {}) {
@@ -90,6 +91,7 @@
     clearTimeout(backgroundResizeTimer);
     backgroundResizeTimer = setTimeout(() => requestAnimationFrame(layoutBackgroundEdges), 40);
     syncResponsiveShell();
+    applyCompanionPresentation(state.settings);
     positionControlMenu();
     if (innerWidth >= 900 && innerHeight >= 650) persistUiState({window_width:Math.round(innerWidth), window_height:Math.round(innerHeight)}, 500);
   }, {passive:true});
@@ -123,8 +125,8 @@
 
   function syncVoiceStopButton() {
     const button = $('#stop-voice-main');
-    if (!button) return;
-    button.hidden = !(state.ttsPlaying || state.ttsAbort || state.liveCall?.state === 'SPEAKING');
+    if (button) button.hidden = !(state.ttsPlaying || state.ttsAbort || state.liveCall?.state === 'SPEAKING');
+    syncCompanionState();
   }
 
   function sanitizeBrowserSpeech(text) {
@@ -957,7 +959,253 @@
   function setGenerationPhase(phase, text='') {
     state.generationPhase = phase || 'ready';
     syncGenerationState();
+    syncCompanionState();
     if (text) setComposeStatus(text);
+  }
+
+  const COMPANION_FRAME_ROOT = '/static/assets/companion/frames/';
+  const companionFrames = names => names.map(([file, ms]) => Object.freeze({src:COMPANION_FRAME_ROOT + file, ms}));
+  const COMPANION_ANIMATIONS = Object.freeze({
+    neutral: Object.freeze({loop:true, frames:companionFrames([
+      ['idle_0.png',720],['idle_1.png',180],['idle_2.png',180],['idle_3.png',180],
+      ['idle_4.png',180],['idle_5.png',180],['idle_6.png',180],['idle_7.png',620]
+    ])}),
+    blink: Object.freeze({loop:false, frames:companionFrames([
+      ['idle_0.png',75],['blink_0.png',95],['blink_1.png',80],['blink_0.png',90],['idle_0.png',110]
+    ])}),
+    thinking: Object.freeze({loop:true, loopStart:3, frames:companionFrames([
+      ['side_0.png',90],['side_1.png',100],['side_2.png',110],
+      ['side_3.png',460],['side_4.png',460],['side_5.png',460],['side_6.png',560]
+    ])}),
+    curious: Object.freeze({loop:false, frames:companionFrames([
+      ['side_0.png',180],['side_1.png',150],['side_2.png',150],['side_3.png',220],
+      ['side_4.png',260],['side_5.png',300],['side_6.png',420]
+    ])}),
+    generating: Object.freeze({loop:true, frames:companionFrames([
+      ['wink_0.png',210],['wink_1.png',120],['wink_2.png',110],['wink_3.png',105],
+      ['wink_4.png',110],['wink_5.png',125],['wink_6.png',300]
+    ])}),
+    listening: Object.freeze({loop:true, frames:companionFrames([
+      ['idle_0.png',420],['idle_1.png',170],['idle_2.png',170],['idle_3.png',170],
+      ['idle_4.png',170],['idle_5.png',170],['idle_6.png',170],['idle_7.png',420]
+    ])}),
+    speaking: Object.freeze({loop:true, frames:companionFrames([
+      ['cheer_0.png',115],['cheer_1.png',100],['cheer_2.png',90],['cheer_3.png',85],
+      ['cheer_4.png',90],['cheer_5.png',100],['cheer_6.png',155]
+    ])}),
+    happy: Object.freeze({loop:true, frames:companionFrames([
+      ['cheer_0.png',170],['cheer_1.png',135],['cheer_2.png',115],['cheer_3.png',105],
+      ['cheer_4.png',115],['cheer_5.png',135],['cheer_6.png',300]
+    ])}),
+    heart: Object.freeze({loop:true, frames:companionFrames([
+      ['heart_0.png',220],['heart_1.png',160],['heart_2.png',150],['heart_3.png',150],
+      ['heart_4.png',170],['heart_5.png',150],['heart_6.png',150],['heart_7.png',160],['heart_8.png',300]
+    ])}),
+    wink: Object.freeze({loop:false, frames:companionFrames([
+      ['wink_0.png',190],['wink_1.png',130],['wink_2.png',110],['wink_3.png',105],
+      ['wink_4.png',115],['wink_5.png',140],['wink_6.png',430]
+    ])}),
+    error: Object.freeze({loop:true, frames:companionFrames([
+      ['shy_0.png',340],['shy_1.png',260],['shy_2.png',240],['shy_3.png',240],
+      ['shy_4.png',240],['shy_5.png',260],['shy_6.png',420]
+    ])}),
+    bashful: Object.freeze({loop:false, frames:companionFrames([
+      ['shy_0.png',240],['shy_1.png',190],['shy_2.png',180],['shy_3.png',210],
+      ['shy_4.png',220],['shy_5.png',240],['shy_6.png',420]
+    ])}),
+    sleepy: Object.freeze({loop:true, frames:companionFrames([
+      ['sleep_0.png',680],['sleep_1.png',520],['sleep_2.png',500],['sleep_3.png',500],
+      ['sleep_4.png',560],['sleep_5.png',520],['sleep_6.png',760]
+    ])})
+  });
+
+  function applyCompanionPresentation(s = state.settings) {
+    const host = $('#studio-companion');
+    if (!host) return;
+    const scale = clamp(Number(s?.companion_scale ?? 1), .55, 1.60);
+    const compactBase = innerWidth <= 700 ? [96,147] : innerWidth <= 1040 ? [112,172] : [128,196];
+    host.style.setProperty('--companion-width', `${Math.round(compactBase[0] * scale)}px`);
+    host.style.setProperty('--companion-height', `${Math.round(compactBase[1] * scale)}px`);
+    host.style.setProperty('--companion-side-offset', `${Math.round(clamp(Number(s?.companion_side_offset ?? 6), 0, 160))}px`);
+    host.style.setProperty('--companion-bottom-offset', `${Math.round(clamp(Number(s?.companion_bottom_offset ?? 0), 0, 220))}px`);
+    host.style.setProperty('--companion-opacity', clamp(Number(s?.companion_opacity ?? 1), .35, 1));
+    const dock = String(s?.companion_dock || 'right').toLowerCase() === 'left' ? 'left' : 'right';
+    host.style.left = dock === 'left' ? 'var(--companion-side-offset)' : 'auto';
+    host.style.right = dock === 'right' ? 'var(--companion-side-offset)' : 'auto';
+    host.dataset.clickable = s?.companion_click_reactions === false ? 'false' : 'true';
+    const target = $('#companion-react');
+    if (target) {
+      target.title = s?.companion_click_reactions === false ? 'Click reactions disabled in Companion settings' : 'Click for a reaction';
+      target.setAttribute('aria-disabled', s?.companion_click_reactions === false ? 'true' : 'false');
+    }
+  }
+
+  function preloadCompanionFrames() {
+    if (state.companion.preloadDone) return;
+    state.companion.preloadDone = true;
+    const urls = new Set();
+    Object.values(COMPANION_ANIMATIONS).forEach(anim => anim.frames.forEach(frame => urls.add(frame.src)));
+    urls.forEach(src => { const img = new Image(); img.decoding = 'async'; img.src = src; });
+  }
+
+  function stopCompanionFrames() {
+    clearTimeout(state.companion.frameTimer);
+    state.companion.frameTimer = null;
+  }
+
+  function renderCompanionFrame(animationKey, index) {
+    const frame = $('#companion-frame');
+    const anim = COMPANION_ANIMATIONS[animationKey] || COMPANION_ANIMATIONS.neutral;
+    if (!frame || !anim.frames.length) return;
+    const safeIndex = Math.max(0, Math.min(index, anim.frames.length - 1));
+    const next = anim.frames[safeIndex];
+    if (frame.getAttribute('src') !== next.src) frame.src = next.src;
+    state.companion.frameIndex = safeIndex;
+  }
+
+  function runCompanionFrame() {
+    stopCompanionFrames();
+    const key = state.companion.animationKey || 'neutral';
+    const anim = COMPANION_ANIMATIONS[key] || COMPANION_ANIMATIONS.neutral;
+    if (!anim.frames.length) return;
+    renderCompanionFrame(key, state.companion.frameIndex);
+    if (boolValue(state.settings.reduce_motion)) return;
+    const current = anim.frames[state.companion.frameIndex];
+    state.companion.frameTimer = setTimeout(() => {
+      state.companion.frameTimer = null;
+      if (state.companion.animationKey !== key) return;
+      const nextIndex = state.companion.frameIndex + 1;
+      if (nextIndex >= anim.frames.length) {
+        if (!anim.loop) {
+          state.companion.frameIndex = anim.frames.length - 1;
+          renderCompanionFrame(key, state.companion.frameIndex);
+          return;
+        }
+        const loopStart = Math.max(0, Math.min(Number(anim.loopStart) || 0, anim.frames.length - 1));
+        state.companion.frameIndex = loopStart;
+      } else state.companion.frameIndex = nextIndex;
+      runCompanionFrame();
+    }, Math.max(45, (Number(current.ms) || 200) / clamp(Number(state.settings.companion_animation_speed || 1), .5, 1.75)));
+  }
+
+  function setCompanionAnimation(name, force=false) {
+    const key = COMPANION_ANIMATIONS[name] ? name : 'neutral';
+    if (!force && state.companion.animationKey === key) return;
+    state.companion.animationKey = key;
+    state.companion.frameIndex = 0;
+    runCompanionFrame();
+  }
+
+  function clearCompanionAmbient() {
+    clearTimeout(state.companion.ambientTimer);
+    state.companion.ambientTimer = null;
+  }
+
+  function scheduleCompanionAmbient() {
+    clearCompanionAmbient();
+    if (state.settings.companion_enabled === false || boolValue(state.settings.reduce_motion)) return;
+    const host = $('#studio-companion');
+    if (!host || host.hidden) return;
+    const ambientMode = String(state.settings.companion_ambient_mode || 'normal').toLowerCase();
+    if (ambientMode === 'off') return;
+    const ambientWindows = {quiet:[18000,30000], normal:[11000,20000], lively:[6000,12000]};
+    const [minDelay,maxDelay] = ambientWindows[ambientMode] || ambientWindows.normal;
+    const delay = minDelay + Math.floor(Math.random() * Math.max(1, maxDelay - minDelay));
+    state.companion.ambientTimer = setTimeout(() => {
+      state.companion.ambientTimer = null;
+      if (!state.companion.overrideMood && companionBaseMood() === 'neutral' && state.settings.companion_enabled !== false) {
+        const roll = Math.random();
+        if (roll < .42) companionPulse('wink', 1650);
+        else if (roll < .72) companionPulse('curious', 2100);
+        else if (roll < .94) companionPulse('happy', 1750);
+        else companionPulse('heart', 2200);
+      }
+      scheduleCompanionAmbient();
+    }, delay);
+  }
+
+  function applyCompanionVisibility(enabled = state.settings.companion_enabled !== false) {
+    const host = $('#studio-companion');
+    if (!host) return;
+    applyCompanionPresentation(state.settings);
+    host.dataset.clickable = state.settings.companion_click_reactions === false ? 'false' : 'true';
+    host.hidden = !enabled;
+    if (!enabled) {
+      clearTimeout(state.companion.blinkTimer);
+      state.companion.blinkTimer = null;
+      clearCompanionAmbient();
+      stopCompanionFrames();
+      return;
+    }
+    preloadCompanionFrames();
+    syncCompanionState(true);
+    scheduleCompanionBlink();
+    scheduleCompanionAmbient();
+  }
+
+  function companionBaseMood() {
+    if (state.settings.companion_state_reactions === false) return 'neutral';
+    const live = String(state.liveCall?.state || 'IDLE').toUpperCase();
+    if (state.ttsPlaying || live === 'SPEAKING') return 'speaking';
+    if (live === 'LISTENING') return 'listening';
+    if (['PREPARING','TRANSCRIBING','THINKING'].includes(live)) return 'thinking';
+    const phase = String(state.generationPhase || 'ready').toLowerCase();
+    if (phase === 'error') return 'error';
+    if (phase === 'thinking' || phase === 'starting') return 'thinking';
+    if (phase === 'generating') return 'generating';
+    return 'neutral';
+  }
+
+  function scheduleCompanionBlink() {
+    clearTimeout(state.companion.blinkTimer);
+    state.companion.blinkTimer = null;
+    if (state.settings.companion_enabled === false || boolValue(state.settings.reduce_motion)) return;
+    const host = $('#studio-companion');
+    if (!host || host.hidden) return;
+    const delay = 2800 + Math.floor(Math.random() * 4200);
+    state.companion.blinkTimer = setTimeout(() => {
+      state.companion.blinkTimer = null;
+      if (!state.companion.overrideMood && companionBaseMood() === 'neutral' && state.settings.companion_enabled !== false) {
+        companionPulse('blink', 500);
+      }
+      scheduleCompanionBlink();
+    }, delay);
+  }
+
+  function syncCompanionState(force=false) {
+    const host = $('#studio-companion');
+    if (!host) return;
+    const enabled = state.settings.companion_enabled !== false;
+    host.hidden = !enabled;
+    if (!enabled) { clearCompanionAmbient(); stopCompanionFrames(); return; }
+    preloadCompanionFrames();
+    const mood = state.companion.overrideMood || companionBaseMood();
+    host.dataset.mood = mood;
+    setCompanionAnimation(mood, force);
+    if (!state.companion.blinkTimer && !boolValue(state.settings.reduce_motion)) scheduleCompanionBlink();
+    if (!state.companion.ambientTimer && !boolValue(state.settings.reduce_motion)) scheduleCompanionAmbient();
+  }
+
+  function companionPulse(mood='happy', duration=1400) {
+    if (state.settings.companion_enabled === false) return;
+    clearTimeout(state.companion.overrideTimer);
+    state.companion.overrideMood = COMPANION_ANIMATIONS[mood] ? mood : 'happy';
+    syncCompanionState(true);
+    state.companion.overrideTimer = setTimeout(() => {
+      state.companion.overrideTimer = null;
+      state.companion.overrideMood = '';
+      syncCompanionState(true);
+    }, Math.max(250, Number(duration) || 1400));
+  }
+
+  function companionReact() {
+    if (state.settings.companion_click_reactions === false) return;
+    const choices = ['heart','wink','happy','curious','bashful'];
+    const current = state.companion.overrideMood;
+    let next = choices[(choices.indexOf(current) + 1 + choices.length) % choices.length];
+    if (!current) next = choices[Math.floor(Math.random() * choices.length)];
+    const duration = next === 'heart' ? 2100 : next === 'curious' ? 1900 : next === 'bashful' ? 1750 : 1550;
+    companionPulse(next, duration);
   }
 
 
@@ -993,7 +1241,7 @@
   function sessionGenerationProfile() {
     const raw = state.session?.generation_profile || {};
     return {
-      model: String(raw.model || state.settings.ollama_chat_model || state.runtime.selected_model || '').trim(),
+      model: String(raw.model || configuredDefaultModel() || '').trim(),
       think_mode: String(raw.think_mode || state.settings.think_mode || 'auto').toLowerCase(),
       locked: !!raw.locked || !!(state.session?.messages || []).length
     };
@@ -1023,16 +1271,17 @@
     const modelLabel = $('#quick-model-label');
     const modelMeta = $('#quick-model-meta');
     const modelTrigger = $('#quick-model-trigger');
-    if (modelLabel) modelLabel.textContent = selectedModel || 'No local model';
+    if (modelLabel) modelLabel.textContent = modelDisplayName(selectedModel) || 'No model';
     if (modelMeta) {
-      if (!selectedModel) modelMeta.textContent = state.runtime.ok ? 'No local model selected' : 'Runtime offline';
-      else if (locked) modelMeta.textContent = 'Locked to this chat';
+      if (!selectedModel) modelMeta.textContent = 'No model selected';
+      else if (locked) modelMeta.textContent = `${isOpenRouterModelSpec(selectedModel) ? 'OpenRouter online' : 'Local Ollama'} · locked to this chat`;
+      else if (isOpenRouterModelSpec(selectedModel)) modelMeta.textContent = onlineChatReady() ? 'OpenRouter online · editable until first message' : 'OpenRouter setup required';
       else if ((state.runtime.loaded_models || []).includes(selectedModel)) modelMeta.textContent = 'Loaded locally · editable until first message';
-      else modelMeta.textContent = state.runtime.ok ? 'Portable store · editable until first message' : 'Runtime offline';
+      else modelMeta.textContent = state.runtime.ok ? 'Portable store · editable until first message' : 'Local runtime offline';
     }
     if (modelTrigger) {
-      modelTrigger.disabled = !!state.abort || !(state.runtime.models || []).length || locked;
-      modelTrigger.title = locked ? 'Start a new chat to change the model.' : 'Choose the model for this new chat.';
+      modelTrigger.disabled = !!state.abort || !chatModelOptions().length || locked;
+      modelTrigger.title = locked ? 'Start a new chat to change the model.' : 'Choose a local or OpenRouter model for this new chat.';
     }
 
     const think = thinkModeInfo(profile.think_mode);
@@ -1047,7 +1296,7 @@
     }
     const modelSelect = $('#quick-model');
     const thinkSelect = $('#quick-think');
-    if (modelSelect) modelSelect.disabled = !!state.abort || !state.runtime.model_ready || locked;
+    if (modelSelect) modelSelect.disabled = !!state.abort || !chatModelOptions().length || locked;
     if (thinkSelect) thinkSelect.disabled = !!state.abort || locked;
   }
 
@@ -1075,34 +1324,24 @@
         }))
       };
     }
-    const models = state.runtime.models || [];
+    const options = chatModelOptions();
     const selected = sessionGenerationProfile().model;
     const loaded = new Set(state.runtime.loaded_models || []);
     return {
       kicker: 'MODEL',
-      title: 'Portable models',
-      copy: 'Choose the active local model for this chat. Only models in this project store appear here.',
-      foot: `${models.length} installed · ${loaded.size} loaded`,
-      searchable: models.length > 6,
-      items: models.map(model => {
-        const name = model.name || model.model;
-        const loadedInfo = (state.runtime.loaded_model_details || []).find(x => (x.name || x.model) === name);
-        const extras = [];
-        if (loadedInfo?.size_vram) extras.push(`${fmtBytes(loadedInfo.size_vram)} VRAM`);
-        if (loadedInfo?.context_length) extras.push(`${Number(loadedInfo.context_length).toLocaleString()} ctx`);
-        return {
-          value: name,
-          label: name,
-          meta: modelDetailText(model),
-          detail: extras.join(' · ') || 'Available in the project-local Ollama store.',
-          active: name === selected,
-          badges: [name === selected ? 'ACTIVE' : '', loaded.has(name) ? 'LOADED' : ''].filter(Boolean),
-          action: () => {
-            $('#quick-model').value = name;
-            $('#quick-model').dispatchEvent(new Event('change', {bubbles:true}));
-            closeControlMenu();
-          }
-        };
+      title: 'Chat models',
+      copy: 'Choose a private local model or an optional OpenRouter online model for this chat.',
+      foot: `${(state.runtime.models || []).length} local · ${(state.openrouter.models || []).length} online`,
+      searchable: options.length > 6,
+      items: options.map(item => {
+        if (item.provider === 'openrouter') {
+          const model=item.model || {};
+          return { value:item.value, label:item.label, meta:model.free ? 'OpenRouter · FREE' : 'OpenRouter · PAID', detail:model.description || 'Remote model through OpenRouter.', active:item.value===selected, badges:[item.value===selected?'ACTIVE':'',model.free?'FREE':'PAID'].filter(Boolean), action:()=>{ $('#quick-model').value=item.value; $('#quick-model').dispatchEvent(new Event('change',{bubbles:true})); closeControlMenu(); } };
+        }
+        const name=item.value, model=item.model || {};
+        const loadedInfo=(state.runtime.loaded_model_details || []).find(x => (x.name || x.model) === name); const extras=[];
+        if (loadedInfo?.size_vram) extras.push(`${fmtBytes(loadedInfo.size_vram)} VRAM`); if (loadedInfo?.context_length) extras.push(`${Number(loadedInfo.context_length).toLocaleString()} ctx`);
+        return { value:name,label:name,meta:modelDetailText(model),detail:extras.join(' · ') || 'Available in the project-local Ollama store.',active:name===selected,badges:[name===selected?'ACTIVE':'',loaded.has(name)?'LOADED':'LOCAL'].filter(Boolean),action:()=>{ $('#quick-model').value=name; $('#quick-model').dispatchEvent(new Event('change',{bubbles:true})); closeControlMenu(); } };
       })
     };
   }
@@ -1409,6 +1648,116 @@
     const reduceMotion = boolValue(s.reduce_motion);
     body.classList.toggle('reduce-motion', reduceMotion);
     body.classList.toggle('motion-enabled', !reduceMotion);
+    applyCompanionPresentation(s);
+    applyCompanionVisibility(s.companion_enabled !== false);
+    if (s === state.settings) syncCompanionState();
+  }
+
+  function isOpenRouterModelSpec(value) { return String(value || '').startsWith('openrouter::'); }
+  function openRouterSlug(value) { return isOpenRouterModelSpec(value) ? String(value).slice('openrouter::'.length) : ''; }
+  function encodeOpenRouterModel(slug) { return `openrouter::${String(slug || '').trim()}`; }
+  function configuredDefaultModel(settings = state.settings) {
+    return String(settings.chat_provider || 'local') === 'openrouter'
+      ? encodeOpenRouterModel(settings.openrouter_chat_model || 'openrouter/free')
+      : String(settings.ollama_chat_model || state.runtime.selected_model || '').trim();
+  }
+  function onlineModelInfo(spec) {
+    const slug = openRouterSlug(spec);
+    return (state.openrouter.models || []).find(row => row.id === slug) || null;
+  }
+  function modelDisplayName(spec) {
+    const raw = String(spec || '').trim();
+    if (!isOpenRouterModelSpec(raw)) return raw;
+    const info = onlineModelInfo(raw);
+    return info?.name || openRouterSlug(raw) || 'OpenRouter';
+  }
+  function onlineChatReady() { return !!state.settings.openrouter_allow_online && !!state.openrouter.configured; }
+  function chatModelUsable(spec = sessionGenerationProfile().model) {
+    if (isOpenRouterModelSpec(spec)) return onlineChatReady();
+    return !!state.runtime.ok && installedNames().includes(String(spec || '').trim());
+  }
+  function chatModelOptions() {
+    const local = (state.runtime.models || []).map(model => ({
+      value:model.name || model.model, label:model.name || model.model, provider:'local', model
+    })).filter(x => x.value);
+    const online = (state.openrouter.models || []).map(model => ({
+      value:encodeOpenRouterModel(model.id), label:model.name || model.id, provider:'openrouter', model
+    }));
+    return [...local, ...online];
+  }
+  function fillQuickModelSelect(selected) {
+    const select = $('#quick-model'); if (!select) return;
+    const options = chatModelOptions(); select.replaceChildren();
+    for (const item of options) { const o=document.createElement('option'); o.value=item.value; o.textContent=item.label; select.append(o); }
+    select.disabled = !options.length || sessionControlsLocked();
+    if (options.some(x=>x.value===selected)) select.value = selected;
+    else if (options[0]) select.value = options[0].value;
+  }
+  function fillOpenRouterModelSelect(selected) {
+    const select = $('#set-openrouter-model'); if (!select) return;
+    select.replaceChildren();
+    for (const row of (state.openrouter.models || [])) {
+      const o=document.createElement('option'); o.value=row.id; o.textContent=`${row.name || row.id}${row.free ? ' · FREE' : ' · PAID'}`; select.append(o);
+    }
+    if ((state.openrouter.models || []).some(x=>x.id===selected)) select.value=selected;
+    else if (select.options.length) select.selectedIndex=0;
+  }
+  function setOpenRouterActionStatus(message, tone='info') {
+    const el = $('#openrouter-action-status');
+    if (!el) return;
+    el.textContent = String(message || '');
+    el.dataset.tone = tone || 'info';
+  }
+
+  function renderOpenRouterStatus() {
+    const status = state.openrouter || {};
+    const badge=$('#openrouter-key-badge'), copy=$('#openrouter-key-status'), box=$('#openrouter-box');
+    if (badge) { badge.textContent=status.configured ? 'KEY READY' : 'NO KEY'; badge.classList.toggle('ready', !!status.configured); }
+    if (copy) copy.textContent = status.configured ? `Configured · ${status.source === 'environment' ? 'environment variable' : 'Windows DPAPI'}` : 'Not configured';
+    if (box) box.classList.toggle('disabled-online', !state.settings.openrouter_allow_online);
+  }
+
+  async function refreshOpenRouterStatus({silent=false} = {}) {
+    try {
+      state.openrouter = await api('/api/openrouter/status');
+      fillOpenRouterModelSelect(state.settings.openrouter_chat_model || state.openrouter.selected_model || 'openrouter/free');
+      fillQuickModelSelect(sessionGenerationProfile().model); renderOpenRouterStatus(); syncQuickControlLabels();
+      return state.openrouter;
+    } catch (e) { if (!silent) setComposeStatus(`OpenRouter · ${e.message}`); throw e; }
+  }
+
+  async function saveOpenRouterKey() {
+    const input=$('#set-openrouter-key'); const key=String(input?.value || '').trim();
+    if (!key) { setOpenRouterActionStatus('Paste an OpenRouter API key first.', 'danger'); showToast('Paste an OpenRouter API key first.', {title:'OpenRouter', tone:'danger', duration:3000}); return; }
+    const button=$('#save-openrouter-key'); if (button) button.disabled=true;
+    setOpenRouterActionStatus('Saving key securely…', 'info');
+    try {
+      const data=await api('/api/openrouter/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:key})});
+      state.openrouter=data.status || await api('/api/openrouter/status'); if (input) input.value=''; renderOpenRouterStatus(); fillQuickModelSelect(sessionGenerationProfile().model);
+      setOpenRouterActionStatus('Key saved securely with Windows DPAPI.', 'success');
+      showToast('API key saved with Windows DPAPI.', {title:'OpenRouter', tone:'success', duration:2600});
+    } catch(e) { setOpenRouterActionStatus(`Save failed · ${e.message}`, 'danger'); showToast(e.message, {title:'OpenRouter key', tone:'danger', duration:4200}); } finally { if (button) button.disabled=false; }
+  }
+
+  async function testOpenRouterKey() {
+    const button=$('#test-openrouter-key'); if (button) button.disabled=true;
+    setOpenRouterActionStatus('Testing the saved key with OpenRouter…', 'info');
+    try {
+      const data=await api('/api/openrouter/test',{method:'POST'});
+      const tier=data.is_free_tier ? 'free tier' : 'account';
+      const message=`Key valid · ${tier}${data.limit_remaining != null ? ` · ${data.limit_remaining} remaining` : ''}`;
+      setOpenRouterActionStatus(message, 'success');
+      showToast(message, {title:'OpenRouter', tone:'success', duration:3400});
+      await refreshOpenRouterStatus({silent:true});
+    } catch(e) { setOpenRouterActionStatus(`Test failed · ${e.message}`, 'danger'); showToast(e.message, {title:'OpenRouter key test', tone:'danger', duration:4200}); } finally { if (button) button.disabled=false; }
+  }
+
+  async function clearOpenRouterKey() {
+    const button=$('#clear-openrouter-key'); if (button) button.disabled=true;
+    setOpenRouterActionStatus('Clearing saved OpenRouter key…', 'info');
+    try { await api('/api/openrouter/key',{method:'DELETE'}); await refreshOpenRouterStatus({silent:true}); setOpenRouterActionStatus('Saved OpenRouter key cleared.', 'success'); showToast('Saved OpenRouter key cleared.', {title:'OpenRouter', duration:2400}); }
+    catch(e) { setOpenRouterActionStatus(`Clear failed · ${e.message}`, 'danger'); showToast(e.message, {title:'OpenRouter', tone:'danger', duration:3800}); }
+    finally { if (button) button.disabled=false; }
   }
 
   function installedNames(runtime = state.runtime) {
@@ -1543,25 +1892,40 @@
     $('#set-runtime-health').textContent = !online ? (runtime.error || 'No successful runtime probe') : busy && runtime.probe_error ? 'Alive · status probe delayed while busy' : Number.isFinite(age) ? `Healthy · last success ${age < 1 ? '<1' : Math.round(age)}s ago` : 'Healthy';
 
     if (runtime.model_ready && runtime.selected_model) state.settings.ollama_chat_model = runtime.selected_model;
-    fillModelSelect($('#quick-model'), runtime.models, sessionGenerationProfile().model);
+    fillQuickModelSelect(sessionGenerationProfile().model);
     fillModelSelect($('#set-model'), runtime.models, state.settings.ollama_chat_model);
     syncQuickControlLabels();
     renderModelManager(runtime);
 
     const starter = runtime.starter_model || 'llama3.2:3b';
     $('#starter-chip').textContent = starter;
-    $('#model-alert').hidden = ready;
-    $('#model-alert-reconnect').hidden = online;
-    $('#install-starter').hidden = !online || ready;
-    $('#model-alert-title').textContent = !online ? 'Local runtime disconnected' : 'No local model installed';
-    $('#model-alert-text').textContent = !online
-      ? 'The private Ollama runtime is unavailable. Reconnect it without closing MatrixStudio2.0.'
-      : 'MatrixStudio2.0 is online, but chat needs a model in this project’s private model store.';
-    $('#messages').classList.toggle('has-alert', !ready);
-    $('#send-chat').disabled = !ready || !!state.abort;
+    const activeChatModel = sessionGenerationProfile().model;
+    const activeOnlineModel = isOpenRouterModelSpec(activeChatModel);
+    const chatReady = chatModelUsable(sessionGenerationProfile().model);
+    $('#model-alert').hidden = chatReady;
+    $('#model-alert-reconnect').hidden = activeOnlineModel || online;
+    $('#install-starter').hidden = activeOnlineModel || !online || ready;
+    if (activeOnlineModel) {
+      $('#model-alert-title').textContent = !state.settings.openrouter_allow_online ? 'Online chat disabled' : !state.openrouter.configured ? 'OpenRouter API key required' : 'Online model unavailable';
+      $('#model-alert-text').textContent = !state.settings.openrouter_allow_online
+        ? 'Enable OpenRouter online chat in Runtime settings to use the selected online model.'
+        : !state.openrouter.configured
+          ? 'Add one OpenRouter API key in Runtime settings. The same key works for every OpenRouter model shown here.'
+          : 'The selected OpenRouter model is not ready. Choose another online model or try again.';
+    } else {
+      $('#model-alert-title').textContent = !online ? 'Local runtime disconnected' : 'No local model installed';
+      $('#model-alert-text').textContent = !online
+        ? 'The private Ollama runtime is unavailable. Reconnect it without closing MatrixStudio2.0.'
+        : 'MatrixStudio2.0 is online, but chat needs a model in this project’s private model store.';
+    }
+    $('#messages').classList.toggle('has-alert', !chatReady);
+    $('#send-chat').disabled = !chatReady || !!state.abort;
     if (!state.abort && !['starting','thinking','generating'].includes(state.generationPhase)) {
-      if (!online) setComposeStatus('Runtime disconnected · reconnect available');
-      else if (!ready) setComposeStatus('Install a local model to start chatting');
+      if (activeOnlineModel && !chatReady) {
+        if (!state.settings.openrouter_allow_online) setComposeStatus('Online chat disabled · enable it in Runtime settings');
+        else if (!state.openrouter.configured) setComposeStatus('OpenRouter API key required');
+      } else if (!activeOnlineModel && !online) setComposeStatus('Runtime disconnected · reconnect available');
+      else if (!activeOnlineModel && !ready) setComposeStatus('Install a local model or choose OpenRouter');
     }
   }
 
@@ -1924,7 +2288,7 @@
     $('#chat-title').textContent = state.session?.title || 'New chat';
     const profile = sessionGenerationProfile();
     const reason = thinkModeInfo(profile.think_mode).label;
-    $('#chat-meta').textContent = state.runtime.model_ready ? `${profile.model || 'Local model'} · ${reason}${profile.locked ? ' · LOCKED' : ''}` : 'No model installed';
+    $('#chat-meta').textContent = profile.model ? `${modelDisplayName(profile.model)} · ${isOpenRouterModelSpec(profile.model) ? 'ONLINE' : 'LOCAL'} · ${reason}${profile.locked ? ' · LOCKED' : ''}` : 'No model selected';
     $('#message-count').textContent = `${msgs.length} message${msgs.length === 1 ? '' : 's'}`;
     syncSessionGenerationControls();
     if (sessionChanged) {
@@ -1999,7 +2363,7 @@
     const box = $('#messages'); $('#empty-state')?.remove();
     const row = document.createElement('article'); row.className = 'message-row assistant streaming entering'; row.id = 'stream-row';
     const label = document.createElement('div'); label.className = 'message-label';
-    const who = document.createElement('span'); who.textContent = 'LOCAL MODEL';
+    const who = document.createElement('span'); who.textContent = isOpenRouterModelSpec(sessionGenerationProfile().model) ? 'ONLINE MODEL' : 'LOCAL MODEL';
     const live = document.createElement('span'); live.className = 'message-model live-model'; live.textContent = 'CONNECTING';
     label.append(who, live);
 
@@ -2013,7 +2377,7 @@
   function setBusy(on) {
     $('#send-chat').hidden = on; $('#stop-chat').hidden = !on;
     $('#chat-input').disabled = on;
-    if (!on) $('#send-chat').disabled = !state.runtime.model_ready;
+    if (!on) $('#send-chat').disabled = !sessionGenerationProfile().model;
     syncQuickControlLabels();
   }
 
@@ -2052,7 +2416,7 @@
           accepted = true; state.session.id = ev.session_id; state.session.title = ev.title || state.session.title;
           persistUiState({active_session_id:state.session.id}, 0);
           stream.live.textContent = ev.model || 'STREAMING'; $('#chat-title').textContent = state.session.title;
-          state.runtime = {...state.runtime, ok:true, state:'online', busy:true, model_ready:true, selected_model:ev.model || state.runtime.selected_model, active_generations:1}; renderRuntime();
+          if (ev.provider !== 'openrouter') { state.runtime = {...state.runtime, ok:true, state:'online', busy:true, model_ready:true, selected_model:ev.model || state.runtime.selected_model, active_generations:1}; renderRuntime(); }
           const requested = ev.reasoning_mode || state.settings.think_mode || 'auto';
           const effective = ev.effective_reasoning_mode || requested;
           stream.effectiveReasoning = String(effective).toLowerCase();
@@ -2086,7 +2450,7 @@
           if (!stream.hasThinking) { stream.hasThinking = true; stream.think.panel.hidden = false; stream.think.setQuiet(false); stream.think.setLive(true); stream.think.setOpen(true); }
           stream.think.setText(thinking); $('#messages').scrollTop = $('#messages').scrollHeight;
         } else if (ev.type === 'done') {
-          setGenerationPhase('ready', 'Ready');
+          setGenerationPhase('ready', 'Ready'); companionPulse('happy', 1500);
           if (stream.hasThinking || stream.reasoningExpected) {
             stream.think.setLive(false); stream.think.setOpen(false);
             if (stream.reasoningExpected && !stream.hasThinking) {
@@ -2105,16 +2469,18 @@
   }
 
   async function ensureRuntimeReady() {
+    const model=sessionGenerationProfile().model;
+    if (isOpenRouterModelSpec(model)) {
+      if (!state.settings.openrouter_allow_online) { setComposeStatus('Enable OpenRouter online chat in Runtime settings'); openSettings('runtime'); return false; }
+      if (!state.openrouter.configured) { setComposeStatus('Add an OpenRouter API key in Runtime settings'); openSettings('runtime'); return false; }
+      return true;
+    }
     if (state.runtime.ok && state.runtime.model_ready) return true;
-    if (!state.runtime.ok) {
-      const ok = await reconnectRuntime({silent:true});
-      if (!ok) return false;
-    }
-    if (!state.runtime.model_ready) {
-      setComposeStatus('Install a local model first'); $('#model-alert').hidden = false; return false;
-    }
+    if (!state.runtime.ok) { const ok = await reconnectRuntime({silent:true}); if (!ok) return false; }
+    if (!state.runtime.model_ready) { setComposeStatus('Install a local model first or choose OpenRouter'); $('#model-alert').hidden = false; return false; }
     return true;
   }
+
 
   async function runTurn(endpoint, payload, retryIndex, {onRejected=null, suppressAutoSpeak=false} = {}) {
     if (state.abort) return false;
@@ -2199,6 +2565,7 @@
   function fillSettingsForm(resetDirty = true) {
     const s = state.settings;
     fillModelSelect($('#set-model'), state.runtime.models, s.ollama_chat_model);
+    $('#set-chat-provider').value = s.chat_provider || 'local'; $('#set-openrouter-allow-online').checked = !!s.openrouter_allow_online; fillOpenRouterModelSelect(s.openrouter_chat_model || 'openrouter/free'); renderOpenRouterStatus();
     $('#set-context').value = String(s.ollama_num_ctx || 8192);
     $('#set-keepalive').value = s.ollama_keep_alive ?? '5m';
     $('#set-num-predict').value = s.ollama_num_predict ?? -1;
@@ -2219,7 +2586,11 @@
     $('#set-ui-mode').value = s.ui_mode || 'dark'; $('#set-theme').value = s.theme_preset || 'matrix'; $('#set-density').value = s.ui_density || 'comfortable';
     $('#set-ui-scale').value = s.ui_font_scale || 1; $('#ui-scale-output').value = Number(s.ui_font_scale || 1).toFixed(2);
     $('#set-chat-scale').value = s.chat_font_scale || 1; $('#chat-scale-output').value = Number(s.chat_font_scale || 1).toFixed(2);
-    $('#set-window-width').value = s.window_width || 1440; $('#set-window-height').value = s.window_height || 900; $('#set-reduce-motion').checked = !!s.reduce_motion;
+    $('#set-window-width').value = s.window_width || 1440; $('#set-window-height').value = s.window_height || 900; $('#set-reduce-motion').checked = !!s.reduce_motion; $('#set-companion-enabled').checked = s.companion_enabled !== false;
+    $('#set-companion-scale').value = s.companion_scale ?? 1; $('#companion-scale-output').value = `${Math.round(Number(s.companion_scale ?? 1) * 100)}%`; $('#set-companion-dock').value = s.companion_dock || 'right';
+    $('#set-companion-side-offset').value = s.companion_side_offset ?? 6; $('#companion-side-output').value = `${Math.round(Number(s.companion_side_offset ?? 6))}px`; $('#set-companion-bottom-offset').value = s.companion_bottom_offset ?? 0; $('#companion-bottom-output').value = `${Math.round(Number(s.companion_bottom_offset ?? 0))}px`;
+    $('#set-companion-opacity').value = s.companion_opacity ?? 1; $('#companion-opacity-output').value = `${Math.round(Number(s.companion_opacity ?? 1) * 100)}%`; $('#set-companion-animation-speed').value = s.companion_animation_speed ?? 1; $('#companion-speed-output').value = `${Number(s.companion_animation_speed ?? 1).toFixed(2)}×`;
+    $('#set-companion-ambient').value = s.companion_ambient_mode || 'normal'; $('#set-companion-click-reactions').checked = s.companion_click_reactions !== false; $('#set-companion-state-reactions').checked = s.companion_state_reactions !== false;
     $('#set-gradients').value = s.gradients_enabled ? 'on' : 'off';
     $('#set-gradient-strength').value = s.gradient_strength ?? .42; $('#gradient-strength-output').value = Number(s.gradient_strength ?? .42).toFixed(2);
     $('#set-custom-colors').checked = !!s.custom_colors_enabled;
@@ -2249,7 +2620,7 @@
   function collectSettings() {
     const chosen = $('#set-model').value || state.settings.ollama_chat_model || '';
     return {
-      ollama_chat_model: chosen,
+      ollama_chat_model: chosen, chat_provider: $('#set-chat-provider').value, openrouter_allow_online: $('#set-openrouter-allow-online').checked, openrouter_chat_model: $('#set-openrouter-model').value || 'openrouter/free',
       ollama_num_ctx: Number($('#set-context').value), ollama_keep_alive: $('#set-keepalive').value.trim(), ollama_num_predict: Number($('#set-num-predict').value),
       chat_temperature: Number($('#set-temperature').value), history_turns: Number($('#set-history').value), think_mode: $('#set-think').value,
       show_model_thinking: $('#set-show-thinking').checked, plain_chat: $('#set-plain-chat').checked, show_generation_stats: $('#set-show-stats').checked, show_message_model: $('#set-show-message-model').checked,
@@ -2263,7 +2634,9 @@
       retrieval_max_chunks: 4, retrieval_max_chars: 3600,
       system_prompt: $('#set-system-prompt').value, ui_mode: $('#set-ui-mode').value, theme_preset: $('#set-theme').value, ui_density: $('#set-density').value,
       ui_font_scale: Number($('#set-ui-scale').value), chat_font_scale: Number($('#set-chat-scale').value), window_width: Number($('#set-window-width').value),
-      window_height: Number($('#set-window-height').value), reduce_motion: $('#set-reduce-motion').checked,
+      window_height: Number($('#set-window-height').value), reduce_motion: $('#set-reduce-motion').checked, companion_enabled: $('#set-companion-enabled').checked,
+      companion_scale: Number($('#set-companion-scale').value), companion_dock: $('#set-companion-dock').value, companion_side_offset: Number($('#set-companion-side-offset').value), companion_bottom_offset: Number($('#set-companion-bottom-offset').value),
+      companion_opacity: Number($('#set-companion-opacity').value), companion_animation_speed: Number($('#set-companion-animation-speed').value), companion_ambient_mode: $('#set-companion-ambient').value, companion_click_reactions: $('#set-companion-click-reactions').checked, companion_state_reactions: $('#set-companion-state-reactions').checked,
       background_fit: 'preserve', gradients_enabled: $('#set-gradients').value === 'on', gradient_strength: Number($('#set-gradient-strength').value),
       custom_colors_enabled: $('#set-custom-colors').checked, accent_color: $('#set-accent-color').value, accent_secondary: $('#set-accent-secondary').value,
       background_color: $('#set-background-color').value, panel_color: $('#set-panel-color').value, user_bubble_color: $('#set-user-bubble-color').value, assistant_bubble_color: $('#set-assistant-bubble-color').value, muted_text_color: $('#set-muted-text-color').value,
@@ -2272,14 +2645,26 @@
     };
   }
 
+  async function syncEmptySessionDefaultModel() {
+    if (!state.session?.id || sessionControlsLocked() || (state.session.messages || []).length) return;
+    const target = configuredDefaultModel(state.settings);
+    if (!target || sessionGenerationProfile().model === target) return;
+    const data = await api(`/api/sessions/${encodeURIComponent(state.session.id)}/generation`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model:target})
+    }).catch(()=>null);
+    if (data?.session) state.session = data.session;
+  }
+
   async function persistSettingsSnapshot(snapshot, {announce=false} = {}) {
     const seq = ++state.settingsSaveSeq;
     const data = await api('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(snapshot)});
     if (seq !== state.settingsSaveSeq) return data.settings || state.settings;
     state.settings = data.settings || {...state.settings, ...snapshot};
+    await syncEmptySessionDefaultModel();
     state.dirty = false;
     $('#settings-status').textContent = announce ? 'Saved' : 'Saved automatically';
     if (announce) setComposeStatus('Settings saved');
+    renderRuntime(state.runtime);
     return state.settings;
   }
 
@@ -2324,7 +2709,7 @@
       persistUiState({window_width:Number(settings.window_width || innerWidth), window_height:Number(settings.window_height || innerHeight)}, 0);
       applyAppearance(settings);
       if (state.session?.id && !sessionControlsLocked()) {
-        const patch = {model:settings.ollama_chat_model, think_mode:settings.think_mode || 'auto'};
+        const patch = {model:configuredDefaultModel(settings), think_mode:settings.think_mode || 'auto'};
         const data = await api(`/api/sessions/${encodeURIComponent(state.session.id)}/generation`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).catch(()=>null);
         if (data?.session) state.session = data.session;
       }
@@ -2355,6 +2740,10 @@
       }
       syncQuickControlLabels();
       if ('selected_specialist_id' in patch) await loadSpecialistGroups({quiet:true});
+      if ('companion_enabled' in patch) {
+        if ($('#set-companion-enabled')) $('#set-companion-enabled').checked = state.settings.companion_enabled !== false;
+        applyCompanionVisibility(state.settings.companion_enabled !== false); syncCompanionState();
+      }
       renderChat('keep');
     } catch (e) { setComposeStatus(`Setting failed · ${e.message}`); }
   }
@@ -2724,7 +3113,7 @@
     try {
       const text = await file.text(); const payload = JSON.parse(text);
       const data = await api('/api/workspace/import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-      const fresh = await api('/api/state'); state.settings = fresh.settings || {}; state.runtime = fresh.runtime || {}; state.sessions = fresh.sessions || [];
+      const fresh = await api('/api/state'); state.settings = fresh.settings || {}; state.runtime = fresh.runtime || {}; state.openrouter = fresh.openrouter || state.openrouter; state.sessions = fresh.sessions || [];
       applyAppearance(); renderRuntime(); fillSettingsForm(); renderSessions(); $('#quick-think').value = state.settings.think_mode || 'auto';
       if (state.sessions[0]) await loadSession(state.sessions[0].id); else await createSession();
       $('#import-status').textContent = `Imported ${data.imported_sessions || 0} chat(s)${data.background_warning ? ' · '+data.background_warning : ''}.`;
@@ -2766,7 +3155,7 @@
     const name = $('#specialist-selected-name');
     const detail = $('#specialist-selected-detail');
     if (name) name.textContent = selected ? selected.name : 'Base assistant';
-    if (detail) detail.textContent = selected ? `${selected.group} · manual specialist` : 'Be accurate, practical, concise, and complete.';
+    if (detail) detail.textContent = selected ? `${selected.group} · ${selected.custom ? 'custom' : 'manual'} specialist` : 'Be accurate, practical, concise, and complete.';
     const clear = $('#clear-specialist'); if (clear) clear.disabled = !selected;
   }
 
@@ -2791,7 +3180,7 @@
     const host = $('#specialist-groups'); if (!host) return;
     host.replaceChildren();
     state.specialistGroups.forEach(group => {
-      const button = document.createElement('button'); button.type='button'; button.className=`specialist-group${group.id===state.specialistGroup?' active':''}`;
+      const button = document.createElement('button'); button.type='button'; button.className=`specialist-group${group.id===state.specialistGroup?' active':''}${group.custom?' custom':''}`;
       const name=document.createElement('strong'); name.textContent=group.name;
       const count=document.createElement('span'); count.textContent=String(group.count ?? 0);
       button.append(name,count);
@@ -2800,28 +3189,157 @@
     });
   }
 
+  async function selectSpecialist(agent) {
+    await quickPatch({selected_specialist_id:agent.id});
+    state.selectedSpecialist=agent; renderSpecialistStatus(); renderSpecialistGroups(); await loadSpecialistAgents();
+    showToast(agent.name, {title:'Specialist', tone:'accent', duration:2400});
+  }
+
   async function loadSpecialistAgents() {
     const host = $('#specialist-agents'); if (!host) return;
     host.innerHTML = '<div class="specialist-loading">Loading group…</div>';
     const q = ($('#specialist-search')?.value || '').trim();
     try {
-      const params = new URLSearchParams(); if (state.specialistGroup) params.set('group',state.specialistGroup); if (q) params.set('q',q); params.set('limit','250');
+      const params = new URLSearchParams(); if (state.specialistGroup) params.set('group',state.specialistGroup); if (q) params.set('q',q); params.set('limit','1000');
       const data = await api(`/api/specialists?${params.toString()}`);
       state.specialistAgents = data.agents || [];
       host.replaceChildren();
       if (!state.specialistAgents.length) { const empty=document.createElement('div'); empty.className='specialist-empty'; empty.textContent='No specialists match this search.'; host.append(empty); return; }
       state.specialistAgents.forEach(agent => {
-        const card=document.createElement('button'); card.type='button'; card.className=`specialist-agent${state.selectedSpecialist?.id===agent.id?' selected':''}`;
-        const copy=document.createElement('div'); const title=document.createElement('strong'); title.textContent=agent.name; const desc=document.createElement('span'); desc.textContent=agent.description || agent.group; copy.append(title,desc);
-        const action=document.createElement('em'); action.textContent=state.selectedSpecialist?.id===agent.id?'ACTIVE':'USE'; card.append(copy,action);
-        card.addEventListener('click', async () => {
-          await quickPatch({selected_specialist_id:agent.id});
-          state.selectedSpecialist=agent; renderSpecialistStatus(); renderSpecialistGroups(); await loadSpecialistAgents();
-          showToast(agent.name, {title:'Specialist', tone:'accent', duration:2400});
-        });
+        const card=document.createElement('div'); card.className=`specialist-agent${state.selectedSpecialist?.id===agent.id?' selected':''}${agent.custom?' custom':''}`;
+        const main=document.createElement('button'); main.type='button'; main.className='specialist-agent-main';
+        const copy=document.createElement('div'); const titleRow=document.createElement('div'); titleRow.className='specialist-agent-title-row';
+        const title=document.createElement('strong'); title.textContent=agent.name; titleRow.append(title);
+        if (agent.custom) { const badge=document.createElement('b'); badge.textContent='CUSTOM'; titleRow.append(badge); }
+        const desc=document.createElement('span'); desc.textContent=agent.description || agent.group; copy.append(titleRow,desc);
+        const action=document.createElement('em'); action.textContent=state.selectedSpecialist?.id===agent.id?'ACTIVE':'USE'; main.append(copy,action);
+        main.addEventListener('click', () => { void selectSpecialist(agent); });
+        card.append(main);
+        if (agent.custom) {
+          const tools=document.createElement('div'); tools.className='specialist-agent-tools';
+          const edit=document.createElement('button'); edit.type='button'; edit.className='btn ghost small'; edit.textContent='EDIT'; edit.addEventListener('click',()=>{ void openSpecialistBuilder(agent.id); });
+          tools.append(edit); card.append(tools);
+        }
         host.append(card);
       });
     } catch (e) { host.innerHTML=''; const err=document.createElement('div'); err.className='specialist-empty'; err.textContent=e.message; host.append(err); }
+  }
+
+  async function loadSpecialistTemplates() {
+    if (state.specialistTemplates.length && state.specialistEditableGroups.length) return;
+    const data = await api('/api/specialists/templates');
+    state.specialistTemplates = data.templates || [];
+    state.specialistEditableGroups = data.groups || [];
+    const template=$('#specialist-template'); const group=$('#specialist-group-field');
+    if (template) {
+      template.replaceChildren();
+      state.specialistTemplates.forEach(item=>{ const option=document.createElement('option'); option.value=item.id; option.textContent=item.name; template.append(option); });
+    }
+    if (group) {
+      group.replaceChildren();
+      state.specialistEditableGroups.forEach(name=>{ const option=document.createElement('option'); option.value=name; option.textContent=name; group.append(option); });
+    }
+  }
+
+  function specialistTemplateById(id) { return state.specialistTemplates.find(item=>item.id===id) || state.specialistTemplates[0] || null; }
+
+  function specialistBuilderPayload() {
+    return {
+      template_id: $('#specialist-template')?.value || 'blank',
+      name: ($('#specialist-name')?.value || '').trim(),
+      description: ($('#specialist-description')?.value || '').trim(),
+      group: $('#specialist-group-field')?.value || 'Specialized & Other',
+      mission: ($('#specialist-mission')?.value || '').trim(),
+      tone: ($('#specialist-tone')?.value || '').trim(),
+      approach: ($('#specialist-approach')?.value || '').trim(),
+      structure: ($('#specialist-structure')?.value || '').trim(),
+      output: ($('#specialist-output')?.value || '').trim(),
+      advanced_directive: ($('#specialist-advanced')?.value || '').trim(),
+    };
+  }
+
+  function refreshSpecialistDirectivePreview() {
+    const p=specialistBuilderPayload(); const preview=$('#specialist-directive-preview'); if (!preview) return;
+    const role=p.mission ? `${p.mission.replace(/[.\s]+$/,'')}.` : '[role / mission].';
+    let text=`You are ${p.name || '[Specialist Name]'}, ${role}\n\nOperating Rules:\n1. Tone: ${p.tone || '[tone]'}\n2. Approach: ${p.approach || '[approach]'}\n3. Structure: ${p.structure || '[structure]'}\n4. Output: ${p.output || '[output]'}`;
+    if (p.advanced_directive) text += `\n\nAdditional Directives:\n${p.advanced_directive}`;
+    preview.textContent=text;
+  }
+
+  function applySpecialistTemplate(templateId, {force=false} = {}) {
+    const item=specialistTemplateById(templateId); if (!item) return;
+    const defaults=item.defaults || {};
+    const map={mission:'specialist-mission',tone:'specialist-tone',approach:'specialist-approach',structure:'specialist-structure',output:'specialist-output',advanced_directive:'specialist-advanced'};
+    Object.entries(map).forEach(([key,id])=>{ const el=$(`#${id}`); if (el && (force || !el.value.trim())) el.value=defaults[key] || ''; });
+    const detail=$('#specialist-template-detail'); if (detail) detail.textContent=item.description || 'Template loaded.';
+    refreshSpecialistDirectivePreview();
+  }
+
+  function fillSpecialistBuilder(agent=null) {
+    state.specialistEditingId=agent?.id || '';
+    const title=$('#specialist-builder-title'); if (title) title.textContent=agent ? `Edit ${agent.name}` : 'Create specialist';
+    const values=agent || {};
+    $('#specialist-template').value=values.template_id || state.specialistTemplates.find(x=>x.id==='general-expert')?.id || state.specialistTemplates[0]?.id || 'blank';
+    $('#specialist-name').value=values.name || '';
+    $('#specialist-description').value=values.description || '';
+    $('#specialist-group-field').value=values.group || state.specialistEditableGroups[0] || 'Specialized & Other';
+    for (const [key,id] of Object.entries({mission:'specialist-mission',tone:'specialist-tone',approach:'specialist-approach',structure:'specialist-structure',output:'specialist-output',advanced_directive:'specialist-advanced'})) $(`#${id}`).value=values[key] || '';
+    if (!agent) applySpecialistTemplate($('#specialist-template').value,{force:true}); else { const t=specialistTemplateById($('#specialist-template').value); const detail=$('#specialist-template-detail'); if (detail) detail.textContent=t?.description || ''; }
+    const duplicate=$('#duplicate-specialist'); const remove=$('#delete-specialist'); if (duplicate) duplicate.hidden=!agent; if (remove) remove.hidden=!agent;
+    refreshSpecialistDirectivePreview();
+  }
+
+  async function openSpecialistBuilder(agentId='') {
+    try {
+      await loadSpecialistTemplates();
+      let agent=null;
+      if (agentId) agent=(await api(`/api/specialists/custom/${encodeURIComponent(agentId)}`)).agent;
+      fillSpecialistBuilder(agent);
+      const builder=$('#specialist-builder'); if (builder) builder.hidden=false;
+      setTimeout(()=>$('#specialist-name')?.focus(),30);
+    } catch(e) { showToast(e.message,{title:'Specialist editor',tone:'danger',duration:3400}); }
+  }
+
+  function closeSpecialistBuilder() { const builder=$('#specialist-builder'); if (builder) builder.hidden=true; state.specialistEditingId=''; }
+
+  async function saveCustomSpecialist() {
+    const button=$('#save-specialist'); if (button) button.disabled=true;
+    try {
+      const payload=specialistBuilderPayload();
+      const editing=state.specialistEditingId;
+      const path=editing ? `/api/specialists/custom/${encodeURIComponent(editing)}` : '/api/specialists/custom';
+      const data=await api(path,{method:editing?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      closeSpecialistBuilder();
+      state.specialistGroup='My Specialists';
+      await loadSpecialistGroups();
+      showToast(data.agent?.name || 'Custom specialist saved',{title:'Specialist saved',tone:'success',duration:2600});
+    } catch(e) { showToast(e.message,{title:'Could not save specialist',tone:'danger',duration:4200}); }
+    finally { if (button) button.disabled=false; }
+  }
+
+  async function duplicateCustomSpecialist() {
+    if (!state.specialistEditingId) return;
+    const button=$('#duplicate-specialist'); if (button) button.disabled=true;
+    try {
+      const data=await api(`/api/specialists/custom/${encodeURIComponent(state.specialistEditingId)}/duplicate`,{method:'POST'});
+      closeSpecialistBuilder(); state.specialistGroup='My Specialists'; await loadSpecialistGroups();
+      showToast(data.agent?.name || 'Specialist duplicated',{title:'Custom specialist',tone:'success',duration:2400});
+    } catch(e) { showToast(e.message,{title:'Duplicate failed',tone:'danger',duration:3600}); }
+    finally { if (button) button.disabled=false; }
+  }
+
+  async function deleteCustomSpecialist() {
+    if (!state.specialistEditingId) return;
+    const name=$('#specialist-name')?.value || 'this specialist';
+    if (!window.confirm(`Delete ${name}? This removes only the custom specialist; built-in specialists are never changed.`)) return;
+    const id=state.specialistEditingId; const button=$('#delete-specialist'); if (button) button.disabled=true;
+    try {
+      await api(`/api/specialists/custom/${encodeURIComponent(id)}`,{method:'DELETE'});
+      if (state.selectedSpecialist?.id===id) state.selectedSpecialist=null;
+      closeSpecialistBuilder(); state.specialistGroup='My Specialists'; await loadSpecialistGroups();
+      showToast('Custom specialist deleted',{title:'Specialists',tone:'success',duration:2200});
+    } catch(e) { showToast(e.message,{title:'Delete failed',tone:'danger',duration:3600}); }
+    finally { if (button) button.disabled=false; }
   }
 
   async function clearSpecialist() {
@@ -2980,6 +3498,10 @@
     $('#kill-localhost')?.addEventListener('click', () => shutdownStudio('settings'));
     $('#kill-host-exit')?.addEventListener('click', () => shutdownStudio('quick'));
     $('#new-chat').addEventListener('click', createSession); $('#send-chat').addEventListener('click', sendChat); $('#stop-chat').addEventListener('click', () => stopChat(true)); $('#export-chat').addEventListener('click', exportChat);
+    $('#companion-react')?.addEventListener('click', companionReact);
+    $('#companion-react')?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); companionReact(); } });
+    $('#companion-hide')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); void quickPatch({companion_enabled:false}); });
+    $('#companion-preview-reaction')?.addEventListener('click', () => companionPulse('happy', 1800));
     $('#live-call')?.addEventListener('click', () => { void startLiveCall(); });
     $('#live-call-mute')?.addEventListener('click', toggleLiveMute);
     $('#stop-voice-main')?.addEventListener('click', () => { stopSpeech({notifyBackend:true, release:false}); if (state.liveCall.active && state.liveCall.state === 'SPEAKING') { state.liveCall.processing = false; setTimeout(resumeLiveListening, 40); } });
@@ -2999,7 +3521,9 @@
     $('#control-menu-search').addEventListener('input', e => { if (!state.controlMenu) return; state.controlMenu.filter = e.target.value || ''; renderControlMenuList(); positionControlMenu(); });
     $('#open-settings').addEventListener('click', () => openSettings('runtime')); $('#open-settings-side').addEventListener('click', () => openSettings('appearance')); $('#model-alert-settings').addEventListener('click', () => openSettings('runtime')); $('#model-alert-reconnect').addEventListener('click', () => reconnectRuntime());
     $('#open-specialists').addEventListener('click', openSpecialists); $('#close-specialists').addEventListener('click',()=>$('#specialist-dialog').close()); $('#specialist-done').addEventListener('click',()=>$('#specialist-dialog').close()); $('#clear-specialist').addEventListener('click', clearSpecialist);
-    let specialistSearchTimer=0; $('#specialist-search').addEventListener('input',()=>{clearTimeout(specialistSearchTimer);specialistSearchTimer=setTimeout(loadSpecialistAgents,120);}); $('#specialist-dialog').addEventListener('click',e=>{if(e.target===$('#specialist-dialog'))$('#specialist-dialog').close();});
+    $('#create-specialist')?.addEventListener('click',()=>{ void openSpecialistBuilder(); }); $('#close-specialist-builder')?.addEventListener('click',closeSpecialistBuilder); $('#cancel-specialist')?.addEventListener('click',closeSpecialistBuilder); $('#save-specialist')?.addEventListener('click',()=>{ void saveCustomSpecialist(); }); $('#duplicate-specialist')?.addEventListener('click',()=>{ void duplicateCustomSpecialist(); }); $('#delete-specialist')?.addEventListener('click',()=>{ void deleteCustomSpecialist(); });
+    $('#specialist-template')?.addEventListener('change',e=>applySpecialistTemplate(e.target.value,{force:true})); ['specialist-name','specialist-description','specialist-group-field','specialist-mission','specialist-tone','specialist-approach','specialist-structure','specialist-output','specialist-advanced'].forEach(id=>$('#'+id)?.addEventListener('input',refreshSpecialistDirectivePreview));
+    let specialistSearchTimer=0; $('#specialist-search').addEventListener('input',()=>{clearTimeout(specialistSearchTimer);specialistSearchTimer=setTimeout(loadSpecialistAgents,120);}); $('#specialist-dialog').addEventListener('click',e=>{if(e.target===$('#specialist-dialog'))$('#specialist-dialog').close();}); $('#specialist-dialog').addEventListener('close',closeSpecialistBuilder);
     $('#install-starter').addEventListener('click', () => { openSettings('runtime'); setTimeout(() => startPull(state.runtime.starter_model || 'llama3.2:3b'), 50); }); $('#starter-chip').addEventListener('click', () => { $('#pull-model').value = state.runtime.starter_model || 'llama3.2:3b'; });
     $('#close-settings').addEventListener('click', async () => { if (state.dirty && !(await saveSettings())) return; $('#settings-dialog').close(); }); $('#settings-form').addEventListener('submit', e => e.preventDefault());
     $$('.settings-tab').forEach(btn => btn.addEventListener('click', () => activateSettingsTab(btn.dataset.tab)));
@@ -3008,6 +3532,9 @@
     $('#launch-cleaner')?.addEventListener('click', async () => { const button=$('#launch-cleaner'); button.disabled=true; try { const r=await api('/api/maintenance/cleaner',{method:'POST',headers:{'X-Matrix-Action':'maintenance'}}); showToast(r.tool || 'CYPRA CLEAN', {title:'System maintenance', tone:'success', duration:2600}); if ($('#settings-status')) $('#settings-status').textContent='CYPRA CLEAN launched · approve the Windows UAC prompt.'; } catch(e) { showToast(e.message, {title:'Cleaner launch failed', tone:'danger', duration:3800}); if ($('#settings-status')) $('#settings-status').textContent=e.message; } finally { button.disabled=false; } });
     $('#open-knowledge-folder')?.addEventListener('click', async () => { const button=$('#open-knowledge-folder'); button.disabled=true; try { const r=await api('/api/retrieval/open-folder',{method:'POST',headers:{'X-Matrix-Action':'retrieval'}}); $('#retrieval-status').textContent = r.opened === false ? r.path : 'Knowledge folder opened'; } catch(e) { $('#retrieval-status').textContent=e.message; } finally { button.disabled=false; } });
     $('#reindex-knowledge')?.addEventListener('click', async () => { const button=$('#reindex-knowledge'); button.disabled=true; $('#retrieval-status').textContent='Reindexing…'; try { const r=await api('/api/retrieval/reindex',{method:'POST',headers:{'X-Matrix-Action':'retrieval'}}); $('#retrieval-status').textContent=`${r.knowledge_chunks||0} knowledge · ${r.conversation_chunks||0} cross-chat chunks indexed`; } catch(e) { $('#retrieval-status').textContent=e.message; } finally { button.disabled=false; } });
+    $('#save-openrouter-key')?.addEventListener('click', () => { void saveOpenRouterKey(); }); $('#test-openrouter-key')?.addEventListener('click', () => { void testOpenRouterKey(); }); $('#clear-openrouter-key')?.addEventListener('click', () => { void clearOpenRouterKey(); });
+    $('#set-openrouter-allow-online')?.addEventListener('change', () => { state.settings.openrouter_allow_online = $('#set-openrouter-allow-online').checked; renderOpenRouterStatus(); syncQuickControlLabels(); });
+    $('#set-chat-provider')?.addEventListener('change', () => { syncQuickControlLabels(); });
     $('#refresh-runtime').addEventListener('click', refreshRuntime); $('#reconnect-runtime').addEventListener('click', () => reconnectRuntime());
     $('#warm-model').addEventListener('click', async () => { setComposeStatus('Warming model…'); try { const r=await api('/api/llm/warm',{method:'POST'}); setComposeStatus(`Warm · ${r.model}`); await refreshRuntime(); } catch(e) { setComposeStatus(e.message); } });
     $('#unload-model').addEventListener('click', async () => { try { const r=await api('/api/llm/unload',{method:'POST'}); setComposeStatus(`Unloaded ${r.unloaded?.length||0} model(s)`); await refreshRuntime(); } catch(e) { setComposeStatus(e.message); } });
@@ -3040,10 +3567,17 @@
     const colorBindings = [['set-accent-color','accent-color-value'],['set-accent-secondary','accent-secondary-value'],['set-background-color','background-color-value'],['set-panel-color','panel-color-value'],['set-user-bubble-color','user-bubble-color-value'],['set-assistant-bubble-color','assistant-bubble-color-value'],['set-muted-text-color','muted-text-color-value']];
     colorBindings.forEach(([id,out]) => $('#'+id).addEventListener('input', e => $('#'+out).textContent=e.target.value));
     $$('#settings-dialog input,#settings-dialog select,#settings-dialog textarea').forEach(el => {
-      if (['set-tts-provider','set-tts-allow-online','set-tts-edge-voice'].includes(el.id)) return;
+      if (['set-tts-provider','set-tts-allow-online','set-tts-edge-voice','set-openrouter-key'].includes(el.id)) return;
       el.addEventListener('input', markDirty); el.addEventListener('change', flushSettingsAutosave);
     });
-    ['set-gradients','set-gradient-strength','set-ui-mode','set-theme','set-density','set-ui-scale','set-chat-scale','set-reduce-motion','set-custom-colors','set-accent-color','set-accent-secondary','set-background-color','set-panel-color','set-user-bubble-color','set-assistant-bubble-color','set-muted-text-color','set-background-opacity','set-background-blur','set-background-dim','set-panel-opacity','set-panel-blur','set-glow-strength'].forEach(id => $('#'+id).addEventListener('input', () => { const preview={...state.settings,...collectSettings()}; applyAppearance(preview); }));
+    ['set-gradients','set-gradient-strength','set-ui-mode','set-theme','set-density','set-ui-scale','set-chat-scale','set-reduce-motion','set-companion-enabled','set-companion-scale','set-companion-dock','set-companion-side-offset','set-companion-bottom-offset','set-companion-opacity','set-companion-animation-speed','set-companion-ambient','set-companion-click-reactions','set-companion-state-reactions','set-custom-colors','set-accent-color','set-accent-secondary','set-background-color','set-panel-color','set-user-bubble-color','set-assistant-bubble-color','set-muted-text-color','set-background-opacity','set-background-blur','set-background-dim','set-panel-opacity','set-panel-blur','set-glow-strength'].forEach(id => $('#'+id).addEventListener('input', () => { const preview={...state.settings,...collectSettings()}; applyAppearance(preview); applyCompanionPresentation(preview);
+      if (id === 'set-companion-scale') $('#companion-scale-output').value = `${Math.round(Number(preview.companion_scale || 1) * 100)}%`;
+      if (id === 'set-companion-side-offset') $('#companion-side-output').value = `${Math.round(Number(preview.companion_side_offset || 0))}px`;
+      if (id === 'set-companion-bottom-offset') $('#companion-bottom-output').value = `${Math.round(Number(preview.companion_bottom_offset || 0))}px`;
+      if (id === 'set-companion-opacity') $('#companion-opacity-output').value = `${Math.round(Number(preview.companion_opacity || 1) * 100)}%`;
+      if (id === 'set-companion-animation-speed') $('#companion-speed-output').value = `${Number(preview.companion_animation_speed || 1).toFixed(2)}×`;
+      if (id.startsWith('set-companion-')) { scheduleCompanionAmbient(); syncCompanionState(true); }
+    }));
     $('#session-search').addEventListener('input', e => { state.search = e.target.value; renderSessions(); });
     $('#session-list').addEventListener('scroll', () => closeSessionMenus(), {passive:true});
     $('#sidebar-toggle').addEventListener('click', () => {
@@ -3081,8 +3615,9 @@
 
   async function init() {
     bind(); autoSizeInput(); buildAmbientParticles(); syncGenerationState();
+    preloadCompanionFrames();
     try {
-      const data = await api('/api/state'); state.settings = data.settings || {}; state.runtime = data.runtime || {}; state.sessions = data.sessions || []; state.uiState = data.ui_state || {};
+      const data = await api('/api/state'); state.settings = data.settings || {}; state.runtime = data.runtime || {}; state.openrouter = data.openrouter || {configured:false,models:[]}; state.sessions = data.sessions || []; state.uiState = data.ui_state || {};
       $('#build-id').textContent = data.build_id || '—'; applyAppearance(); renderRuntime(); $('#quick-think').value = state.settings.think_mode || 'auto'; syncQuickControlLabels(); fillSettingsForm(); renderSessions();
       await refreshTTSStatus();
       await refreshSTTStatus();
