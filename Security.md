@@ -9,7 +9,7 @@ Security fixes are maintained against the current CypraStudio release line. When
 Current documented build:
 
 ```text
-2.3.36-settings-reset-audit-20260918
+2.3.37-cyprapet-transitions-20260918
 
 - OpenRouter direct-model catalog entries use current provider slugs; identity-preserving slug renames migrate safely, while retired free endpoints are never silently redirected to paid models.
 ```

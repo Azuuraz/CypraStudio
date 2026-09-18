@@ -8,7 +8,7 @@
     hfRepo: null, hfGroups: [], hfSelectedGroup: '', hfPollTimer: null, shutdownActive: false,
     ttsAbort: null, ttsAudio: null, ttsAudioUrl: '', ttsToken: 0, ttsPlaying: false, edgeVoicesLoaded: false, edgeVoicesLoading: false,
     liveCall: {active:false, muted:false, state:'IDLE', mode:'local', stream:null, audioContext:null, analyser:null, source:null, vadTimer:null, recorder:null, chunks:[], recorderDiscard:false, speechHeard:false, lastVoiceAt:0, recordingStartedAt:0, browserRecognition:null, browserRestartTimer:null, processing:false, generation:0, speakerStartedAt:0, bargeFrames:0},
-    companion: {overrideMood:'', overrideTimer:null, blinkTimer:null, ambientTimer:null, frameTimer:null, animationKey:'', frameIndex:0, preloadDone:false}
+    companion: {overrideMood:'', overrideTimer:null, blinkTimer:null, ambientTimer:null, frameTimer:null, animationKey:'', frameIndex:0, preloadDone:false, pendingAnimationKey:'', pendingSemanticKey:'', semanticKey:'neutral', variantCursor:Object.create(null)}
   };
 
   async function api(path, opts = {}) {
@@ -996,11 +996,18 @@
       ['idle_0.png',520],['idle_1.png',160],['idle_2.png',160],['idle_3.png',160],
       ['idle_4.png',160],['idle_5.png',520]
     ])}),
+    neutral_alt: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['idle_0.png',420],['idle_1.png',120],['idle_2.png',130],['idle_3.png',140],
+      ['idle_4.png',130],['idle_3.png',140],['idle_2.png',130],['idle_1.png',120],['idle_0.png',420]
+    ])}),
     blink: Object.freeze({loop:false, frames:companionFrames([
       ['blink_0.png',80],['blink_1.png',70],['blink_2.png',95],['blink_3.png',110]
     ])}),
     thinking: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
       ['think_0.png',100],['think_1.png',160],['think_2.png',260],['think_3.png',240],['think_4.png',520]
+    ])}),
+    thinking_alt: Object.freeze({loop:true, loopStart:2, frames:companionFrames([
+      ['think_0.png',120],['think_1.png',160],['think_2.png',220],['think_3.png',180],['think_2.png',220],['think_4.png',480]
     ])}),
     curious: Object.freeze({loop:false, frames:companionFrames([
       ['think_0.png',160],['think_1.png',180],['think_2.png',260],['think_3.png',240],['think_4.png',600]
@@ -1008,14 +1015,26 @@
     generating: Object.freeze({loop:true, frames:companionFrames([
       ['work_0.png',280],['work_1.png',130],['work_2.png',130],['work_3.png',260],['work_4.png',220]
     ])}),
+    generating_alt: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['work_0.png',240],['work_1.png',120],['work_2.png',120],['work_3.png',210],['work_4.png',180],['work_3.png',210]
+    ])}),
     listening: Object.freeze({loop:true, frames:companionFrames([
       ['seat_0.png',500],['seat_1.png',260],['seat_2.png',260],['seat_3.png',500]
+    ])}),
+    listening_alt: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['seat_0.png',420],['seat_1.png',220],['seat_2.png',220],['seat_1.png',220],['seat_3.png',420]
     ])}),
     speaking: Object.freeze({loop:true, frames:companionFrames([
       ['speak_0.png',115],['speak_1.png',95],['speak_2.png',90],['speak_3.png',90],['speak_4.png',100],['speak_5.png',130]
     ])}),
+    speaking_alt: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['speak_0.png',105],['speak_2.png',85],['speak_3.png',90],['speak_1.png',90],['speak_4.png',95],['speak_5.png',125]
+    ])}),
     happy: Object.freeze({loop:true, frames:companionFrames([
       ['wave_0.png',160],['wave_1.png',130],['wave_2.png',130],['wave_3.png',280]
+    ])}),
+    happy_alt: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['wave_0.png',150],['wave_1.png',120],['wave_2.png',130],['wave_1.png',120],['wave_3.png',260]
     ])}),
     heart: Object.freeze({loop:true, frames:companionFrames([
       ['magic_0.png',180],['magic_1.png',180],['magic_2.png',180],['magic_3.png',220],['magic_4.png',320]
@@ -1026,11 +1045,17 @@
     error: Object.freeze({loop:true, frames:companionFrames([
       ['think_2.png',300],['think_3.png',350],['think_4.png',350]
     ])}),
+    error_alt: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['think_2.png',260],['think_3.png',260],['think_2.png',220],['think_4.png',360]
+    ])}),
     bashful: Object.freeze({loop:false, frames:companionFrames([
       ['magic_0.png',200],['magic_1.png',180],['magic_2.png',180],['magic_3.png',220],['magic_4.png',600]
     ])}),
     sleepy: Object.freeze({loop:true, frames:companionFrames([
       ['sleep_0.png',550],['sleep_1.png',450],['sleep_2.png',700],['sleep_3.png',1200],['sleep_4.png',500]
+    ])}),
+    sleepy_alt: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['sleep_0.png',480],['sleep_1.png',380],['sleep_2.png',560],['sleep_3.png',980],['sleep_2.png',560],['sleep_4.png',460]
     ])}),
     wave: Object.freeze({loop:false, frames:companionFrames([
       ['wave_0.png',150],['wave_1.png',130],['wave_2.png',130],['wave_3.png',450]
@@ -1040,8 +1065,88 @@
     ])}),
     dash: Object.freeze({loop:false, frames:companionFrames([
       ['dash_0.png',90],['dash_1.png',80],['dash_2.png',80],['dash_3.png',90],['dash_4.png',500]
+    ])}),
+    transition_neutral_to_thinking: Object.freeze({loop:false, frames:companionFrames([
+      ['idle_5.png',100],['think_0.png',120],['think_1.png',160]
+    ])}),
+    transition_thinking_to_generating: Object.freeze({loop:false, frames:companionFrames([
+      ['think_4.png',120],['work_0.png',120],['work_1.png',130]
+    ])}),
+    transition_generating_to_happy: Object.freeze({loop:false, frames:companionFrames([
+      ['work_4.png',120],['wave_0.png',140],['wave_1.png',140]
+    ])}),
+    transition_generating_to_error: Object.freeze({loop:false, frames:companionFrames([
+      ['work_4.png',110],['think_2.png',120],['think_3.png',150]
+    ])}),
+    transition_listening_to_speaking: Object.freeze({loop:false, frames:companionFrames([
+      ['seat_3.png',120],['speak_0.png',95],['speak_1.png',95]
+    ])}),
+    transition_speaking_to_neutral: Object.freeze({loop:false, frames:companionFrames([
+      ['speak_5.png',105],['idle_0.png',130],['idle_1.png',120]
+    ])}),
+    transition_neutral_to_sleepy: Object.freeze({loop:false, frames:companionFrames([
+      ['idle_5.png',140],['sleep_0.png',180],['sleep_1.png',220]
+    ])}),
+    transition_sleepy_to_neutral: Object.freeze({loop:false, frames:companionFrames([
+      ['sleep_4.png',150],['idle_0.png',130],['idle_1.png',130]
     ])})
   });
+  const COMPANION_VARIANTS = Object.freeze({
+    neutral: Object.freeze(['neutral','neutral_alt']),
+    thinking: Object.freeze(['thinking','thinking_alt']),
+    generating: Object.freeze(['generating','generating_alt']),
+    listening: Object.freeze(['listening','listening_alt']),
+    speaking: Object.freeze(['speaking','speaking_alt']),
+    happy: Object.freeze(['happy','happy_alt']),
+    error: Object.freeze(['error','error_alt']),
+    sleepy: Object.freeze(['sleepy','sleepy_alt'])
+  });
+  const COMPANION_TRANSITIONS = Object.freeze({
+    'neutral->thinking': 'transition_neutral_to_thinking',
+    'thinking->generating': 'transition_thinking_to_generating',
+    'generating->happy': 'transition_generating_to_happy',
+    'generating->error': 'transition_generating_to_error',
+    'listening->speaking': 'transition_listening_to_speaking',
+    'speaking->neutral': 'transition_speaking_to_neutral',
+    'neutral->sleepy': 'transition_neutral_to_sleepy',
+    'sleepy->neutral': 'transition_sleepy_to_neutral'
+  });
+  const COMPANION_DIRECT_MOODS = new Set(['blink','curious','heart','wink','bashful','wave','magic','dash']);
+
+  function companionSemanticFromAnimation(key='neutral') {
+    if (!key) return 'neutral';
+    const [first, second, third] = String(key).split('_');
+    if (first === 'transition' && second && third) return third;
+    if (first in COMPANION_VARIANTS) return first;
+    return COMPANION_ANIMATIONS[key] ? first : 'neutral';
+  }
+
+  function pickCompanionVariant(name='neutral') {
+    const options = COMPANION_VARIANTS[name];
+    if (!options?.length) return name;
+    const current = Number(state.companion.variantCursor[name] || 0);
+    const chosen = options[current % options.length] || options[0];
+    state.companion.variantCursor[name] = (current + 1) % options.length;
+    return chosen;
+  }
+
+  function resolveCompanionAnimation(name='neutral') {
+    const key = COMPANION_ANIMATIONS[name] ? name : 'neutral';
+    return pickCompanionVariant(key);
+  }
+
+  function companionTransitionKey(fromMood='neutral', toMood='neutral') {
+    return COMPANION_TRANSITIONS[`${fromMood}->${toMood}`] || '';
+  }
+
+  function shouldUseCompanionTransition(fromMood='neutral', toMood='neutral', force=false) {
+    if (boolValue(state.settings.reduce_motion)) return false;
+    if (!fromMood || !toMood || fromMood === toMood) return false;
+    if (COMPANION_DIRECT_MOODS.has(fromMood) || COMPANION_DIRECT_MOODS.has(toMood)) return false;
+    const host = $('#studio-companion');
+    if (!host || host.hidden) return false;
+    return !!companionTransitionKey(fromMood, toMood);
+  }
 
   function applyCompanionPresentation(s = state.settings) {
     const host = $('#studio-companion');
@@ -1101,6 +1206,15 @@
       const nextIndex = state.companion.frameIndex + 1;
       if (nextIndex >= anim.frames.length) {
         if (!anim.loop) {
+          if (state.companion.pendingAnimationKey) {
+            state.companion.animationKey = state.companion.pendingAnimationKey;
+            state.companion.semanticKey = state.companion.pendingSemanticKey || companionSemanticFromAnimation(state.companion.pendingAnimationKey);
+            state.companion.pendingAnimationKey = '';
+            state.companion.pendingSemanticKey = '';
+            state.companion.frameIndex = 0;
+            runCompanionFrame();
+            return;
+          }
           state.companion.frameIndex = anim.frames.length - 1;
           renderCompanionFrame(key, state.companion.frameIndex);
           return;
@@ -1113,9 +1227,24 @@
   }
 
   function setCompanionAnimation(name, force=false) {
-    const key = COMPANION_ANIMATIONS[name] ? name : 'neutral';
-    if (!force && state.companion.animationKey === key) return;
-    state.companion.animationKey = key;
+    const targetSemantic = COMPANION_ANIMATIONS[name] ? name : 'neutral';
+    const targetKey = resolveCompanionAnimation(targetSemantic);
+    const currentSemantic = state.companion.pendingSemanticKey || state.companion.semanticKey || companionSemanticFromAnimation(state.companion.animationKey);
+    const currentKey = state.companion.animationKey || 'neutral';
+    if (!force && currentSemantic === targetSemantic && currentKey === targetKey) return;
+    const transitionKey = shouldUseCompanionTransition(currentSemantic, targetSemantic, force) ? companionTransitionKey(currentSemantic, targetSemantic) : '';
+    if (transitionKey && currentKey !== transitionKey) {
+      state.companion.pendingAnimationKey = targetKey;
+      state.companion.pendingSemanticKey = targetSemantic;
+      state.companion.animationKey = transitionKey;
+      state.companion.frameIndex = 0;
+      runCompanionFrame();
+      return;
+    }
+    state.companion.pendingAnimationKey = '';
+    state.companion.pendingSemanticKey = '';
+    state.companion.animationKey = targetKey;
+    state.companion.semanticKey = targetSemantic;
     state.companion.frameIndex = 0;
     runCompanionFrame();
   }
@@ -1140,7 +1269,7 @@
       if (!state.companion.overrideMood && companionBaseMood() === 'neutral' && state.settings.companion_enabled !== false) {
         const choices = ['wink','wink','curious','happy','wave','magic','dash','heart'];
         const next = choices[Math.floor(Math.random() * choices.length)];
-        const durations = {curious:2100, heart:2300, magic:2100, dash:1100, wave:1600};
+        const durations = {curious:2100, heart:2300, magic:2100, dash:1100, wave:1600, happy:1700};
         companionPulse(next, durations[next] || 1700);
       }
       scheduleCompanionAmbient();
@@ -1227,7 +1356,7 @@
     const current = state.companion.overrideMood;
     let next = choices[(choices.indexOf(current) + 1 + choices.length) % choices.length];
     if (!current) next = choices[Math.floor(Math.random() * choices.length)];
-    const duration = ({heart:2200, curious:1900, bashful:1900, wave:1600, magic:2100, dash:1100})[next] || 1550;
+    const duration = ({heart:2200, curious:1900, bashful:1900, wave:1600, magic:2100, dash:1100, happy:1700})[next] || 1550;
     companionPulse(next, duration);
   }
 

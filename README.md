@@ -22,7 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.36-settings-reset-audit-20260918`
+> Current build: `2.3.37-cyprapet-transitions-20260918`
 
 OpenRouter UTF-8 stream fix: cloud SSE/JSON responses are explicitly decoded as UTF-8 so typographic punctuation and Unicode symbols do not become mojibake.
 

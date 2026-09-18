@@ -52,7 +52,7 @@ from engine.storage import (
 )
 
 ROOT = Path(__file__).resolve().parent
-BUILD_ID = "2.3.36-settings-reset-audit-20260918"
+BUILD_ID = "2.3.37-cyprapet-transitions-20260918"
 APP_ID = "matrixstudio2-local"
 INSTANCE_ID = os.environ.get("MATRIXSTUDIO2_INSTANCE_ID", "matrixstudio2-dev")
 BACKGROUND_DIR = ROOT / "data" / "background"

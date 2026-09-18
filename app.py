@@ -18,7 +18,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 LOG = DATA / "launch.log"
 READY = DATA / "studio.ready"
 APP_RUNTIME = DATA / "app.runtime.json"
-BUILD_ID = "2.3.36-settings-reset-audit-20260918"
+BUILD_ID = "2.3.37-cyprapet-transitions-20260918"
 APP_ID = "matrixstudio2-local"
 os.chdir(ROOT)
 sys.dont_write_bytecode = True
