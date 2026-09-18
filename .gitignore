@@ -12,3 +12,6 @@ data/settings.lastgood.json
 data/ui_state.json
 
 data/retrieval/
+
+data/custom_specialists.json
+data/openrouter.secret.json

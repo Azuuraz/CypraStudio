@@ -17,9 +17,9 @@ MODEL_PREFIX = "openrouter::"
 SECRET_PATH = ROOT / "data" / "openrouter.secret.json"
 APP_TITLE = "MatrixStudio2.0"
 
-# Curated against OpenRouter's live catalog on 2026-09-18. `openrouter/free`
-# remains the durable default because it automatically selects among currently
-# available free endpoints that satisfy the request's feature requirements.
+# Curated against OpenRouter's live /api/v1/models catalog on 2026-09-18.
+# Free endpoint slugs are volatile, so `openrouter/free` remains the durable
+# default and retired direct free endpoints are never redirected to paid models.
 MODELS: tuple[dict[str, Any], ...] = (
     {
         "id": "openrouter/free",
@@ -29,32 +29,25 @@ MODELS: tuple[dict[str, Any], ...] = (
         "description": "Automatically selects an available free OpenRouter model.",
     },
     {
-        "id": "z-ai/glm-5.3-flash:free",
-        "name": "GLM 5.3 Flash (Free)",
-        "free": True,
-        "context": 1048576,
-        "description": "Multimodal coding and long-horizon agent work on OpenRouter's free endpoint.",
-    },
-    {
         "id": "deepseek/deepseek-v4-flash-0731:free",
         "name": "DeepSeek V4 Flash 0731 (Free)",
         "free": True,
         "context": 1048576,
-        "description": "Coding, reasoning, and agent workflows with a free endpoint.",
+        "description": "Coding, reasoning, and agent workflows with a current free endpoint.",
     },
     {
-        "id": "qwen/qwen3-235b-a22b-2507:free",
-        "name": "Qwen3 235B-A22B Instruct 2507 (Free)",
+        "id": "qwen/qwen3.8-27b:free",
+        "name": "Qwen3.8 27B (Free)",
         "free": True,
-        "context": 262144,
-        "description": "Large multilingual instruction model for reasoning, code, and tool-oriented work.",
+        "context": 1000000,
+        "description": "Current Qwen free endpoint for coding, research, multimodal work, and long-running agents.",
     },
     {
         "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
         "name": "Nemotron 3 Ultra 550B-A55B (Free)",
         "free": True,
-        "context": 1000000,
-        "description": "Large reasoning/orchestration model; free endpoint has provider data-use terms.",
+        "context": 202752,
+        "description": "Large reasoning/orchestration model; free endpoint availability and provider terms can change.",
     },
     {
         "id": "nex-agi/nex-n2.5-pro:free",
@@ -64,15 +57,15 @@ MODELS: tuple[dict[str, Any], ...] = (
         "description": "Agentic coding and verified software-engineering workflows.",
     },
     {
-        "id": "thinkingmachines/inkling:free",
-        "name": "Inkling (Free)",
+        "id": "thinkingmachines/inkling-small:free",
+        "name": "Inkling Small (Free)",
         "free": True,
         "context": 1048576,
         "description": "General reasoning, coding, RAG, tool use, and multimodal understanding.",
     },
     {
-        "id": "nvidia/nemotron-3-super:free",
-        "name": "Nemotron 3 Super (Free)",
+        "id": "nvidia/nemotron-3-super-120b-a12b:free",
+        "name": "Nemotron 3 Super 120B-A12B (Free)",
         "free": True,
         "context": 262144,
         "description": "Efficient agentic reasoning and multi-step task planning.",
@@ -85,6 +78,15 @@ MODELS: tuple[dict[str, Any], ...] = (
         "description": "Optional paid heavyweight model. OpenRouter provider pricing applies.",
     },
 )
+
+# OpenRouter occasionally renames model slugs while keeping the underlying model
+# unchanged. Preserve old MatrixStudio sessions only for identity-preserving
+# renames; never redirect a retired free model to a paid endpoint.
+LEGACY_MODEL_ALIASES: dict[str, str] = {
+    "thinkingmachines/inkling:free": "thinkingmachines/inkling-small:free",
+    "nvidia/nemotron-3-super:free": "nvidia/nemotron-3-super-120b-a12b:free",
+}
+
 _MODEL_IDS = {row["id"] for row in MODELS}
 
 
@@ -112,8 +114,9 @@ def decode_model(value: str) -> str:
 
 def validate_model(slug: str) -> str:
     clean = str(slug or "").strip()
+    clean = LEGACY_MODEL_ALIASES.get(clean, clean)
     if clean not in _MODEL_IDS:
-        raise ValueError("That OpenRouter model is not in MatrixStudio's curated catalog.")
+        raise ValueError("That OpenRouter model is unavailable or no longer in MatrixStudio's current catalog.")
     return clean
 
 

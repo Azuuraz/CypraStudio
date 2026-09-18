@@ -18,7 +18,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 LOG = DATA / "launch.log"
 READY = DATA / "studio.ready"
 APP_RUNTIME = DATA / "app.runtime.json"
-BUILD_ID = "2.3.29-openrouter-keyfix-20260918"
+BUILD_ID = "2.3.30-openrouter-catalogfix-20260918"
 APP_ID = "matrixstudio2-local"
 os.chdir(ROOT)
 sys.dont_write_bytecode = True

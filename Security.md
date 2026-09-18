@@ -9,9 +9,9 @@ Security fixes are maintained against the current CypraStudio release line. When
 Current documented build:
 
 ```text
-2.3.29-openrouter-keyfix-20260918
+2.3.30-openrouter-catalogfix-20260918
 
-- OpenRouter DPAPI persistence uses explicit Win32 ctypes signatures and keeps key-operation feedback inside the modal so protection failures are visible without exposing the secret.
+- OpenRouter direct-model catalog entries use current provider slugs; identity-preserving slug renames migrate safely, while retired free endpoints are never silently redirected to paid models.
 ```
 
 Older builds may contain issues already addressed by later runtime, persistence, TTS, or request-boundary hardening.

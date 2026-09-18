@@ -51,7 +51,7 @@ from engine.storage import (
 )
 
 ROOT = Path(__file__).resolve().parent
-BUILD_ID = "2.3.29-openrouter-keyfix-20260918"
+BUILD_ID = "2.3.30-openrouter-catalogfix-20260918"
 APP_ID = "matrixstudio2-local"
 INSTANCE_ID = os.environ.get("MATRIXSTUDIO2_INSTANCE_ID", "matrixstudio2-dev")
 BACKGROUND_DIR = ROOT / "data" / "background"
@@ -1296,6 +1296,14 @@ def _friendly_generation_error(exc: Exception) -> tuple[str, str]:
             return "openrouter_auth", "OpenRouter rejected the configured API key. Update it in Runtime settings."
         if "429" in raw or "rate limit" in raw:
             return "openrouter_rate_limit", "The selected OpenRouter endpoint is rate-limited right now. Retry or choose another online model."
+        if (
+            "404" in raw
+            or "no endpoints found" in raw
+            or "model not found" in raw
+            or "model is unavailable" in raw
+            or "no longer in matrixstudio's current catalog" in raw
+        ):
+            return "openrouter_model_unavailable", "This OpenRouter model is no longer available at that endpoint. Start a new chat with a current online model."
         if "timeout" in raw or "timed out" in raw:
             return "openrouter_timeout", "The online model timed out. Retry the response or choose another OpenRouter model."
         return "openrouter_generation", "The OpenRouter model could not finish this response. Retry or choose another online model."

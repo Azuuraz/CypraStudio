@@ -2,7 +2,7 @@
 $Root = $PSScriptRoot
 Set-Location -LiteralPath $Root
 
-$BuildId = "2.3.29-openrouter-keyfix-20260918"
+$BuildId = "2.3.30-openrouter-catalogfix-20260918"
 $AppId = "matrixstudio2-local"
 $BootCols = 76
 $BootRows = 18

@@ -22,9 +22,9 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.29-openrouter-keyfix-20260918`
+> Current build: `2.3.30-openrouter-catalogfix-20260918`
 
-OpenRouter key controls now report save/test/clear results directly inside Runtime settings, and Windows DPAPI calls use explicit Win32 ctypes signatures for reliable secure key persistence.
+OpenRouter direct-model catalog entries were refreshed against the live provider catalog: retired free endpoints were removed, renamed Inkling/Nemotron slugs were corrected with identity-preserving migration, and unavailable-model failures now explain that a new chat must use a current endpoint.
 
 ## Features
 
@@ -43,7 +43,7 @@ OpenRouter key controls now report save/test/clear results directly inside Runti
 
 - One OpenRouter API key can be used for every curated online model in Studio.
 - Online chat is **off by default** and has its own explicit privacy gate.
-- Curated free choices include OpenRouter's automatic free router plus GLM 5.3 Flash, DeepSeek V4 Flash 0731, Qwen3 235B-A22B Instruct 2507, Nemotron 3 Ultra, Nex-N2.5-Pro, Inkling, and Nemotron 3 Super free endpoints.
+- Curated free choices include OpenRouter's automatic free router plus DeepSeek V4 Flash 0731, Qwen3.8 27B, Nemotron 3 Ultra, Nex-N2.5-Pro, Inkling Small, and Nemotron 3 Super free endpoints. Direct free endpoints are intentionally updated when OpenRouter retires or renames them.
 - Optional paid Kimi K2.5 is available through the same provider selector.
 - Existing chats remain locked to the model they started with; local and online models can coexist in the new-chat model selector.
 - OpenRouter keys are never written to normal settings or workspace exports. On Windows, keys saved through Studio are protected with the current user's DPAPI credentials; `OPENROUTER_API_KEY` is also supported.
