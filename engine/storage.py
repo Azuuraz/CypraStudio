@@ -125,6 +125,16 @@ THINK_CHOICES = {"auto", "standard", "deep"}
 THEME_CHOICES = {"matrix", "ember", "violet", "ice"}
 DENSITY_CHOICES = {"comfortable", "compact"}
 
+RESET_SETTING_GROUPS: dict[str, frozenset[str]] = {
+    "runtime": frozenset({"port", "ollama_chat_model", "chat_provider", "openrouter_allow_online", "openrouter_chat_model", "ollama_num_ctx", "ollama_keep_alive", "ollama_num_predict"}),
+    "chat": frozenset({"chat_temperature", "history_turns", "plain_chat", "show_generation_stats", "show_message_model", "auto_title_chats", "confirm_delete_chat", "system_prompt", "retrieval_enabled", "retrieval_include_knowledge", "retrieval_include_older_chat", "retrieval_include_cross_chat", "retrieval_max_chunks", "retrieval_max_chars"}),
+    "voice": frozenset({"voice_output_enabled", "tts_provider", "tts_allow_online", "tts_edge_voice", "tts_local_voice", "tts_online_fallback", "tts_rate", "tts_pitch", "tts_volume", "tts_tone", "tts_intensity", "tts_pause_style", "tts_expression_detail", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_max_chars", "tts_stop_previous", "tts_cpu_threads", "stt_provider", "stt_allow_browser_online", "stt_local_model", "stt_max_seconds"}),
+    "reasoning": frozenset({"think_mode", "show_model_thinking"}),
+    "specialists": frozenset({"selected_specialist_id"}),
+    "appearance": frozenset({"ui_mode", "theme_preset", "ui_density", "ui_font_scale", "chat_font_scale", "reduce_motion", "window_width", "window_height", "custom_colors_enabled", "accent_color", "accent_secondary", "background_color", "panel_color", "user_bubble_color", "assistant_bubble_color", "muted_text_color", "background_image_enabled", "background_image_version", "background_image_opacity", "background_blur", "background_dim", "background_zoom", "background_fit", "gradients_enabled", "gradient_strength", "panel_opacity", "panel_blur", "glow_strength"}),
+    "companion": frozenset({"companion_enabled", "companion_scale", "companion_dock", "companion_side_offset", "companion_bottom_offset", "companion_opacity", "companion_animation_speed", "companion_ambient_mode", "companion_click_reactions", "companion_state_reactions"}),
+}
+
 
 def _as_bool(value: Any) -> bool:
     if isinstance(value, bool):
@@ -369,21 +379,15 @@ def update_settings(patch: dict[str, Any]) -> dict[str, Any]:
 
 
 def reset_settings(section: str = "all") -> dict[str, Any]:
-    groups = {
-        "runtime": {"port", "ollama_chat_model", "chat_provider", "openrouter_allow_online", "openrouter_chat_model", "ollama_num_ctx", "ollama_keep_alive", "ollama_num_predict"},
-        "chat": {"chat_temperature", "history_turns", "plain_chat", "show_generation_stats", "show_message_model", "auto_title_chats", "confirm_delete_chat", "system_prompt", "retrieval_enabled", "retrieval_include_knowledge", "retrieval_include_older_chat", "retrieval_include_cross_chat", "retrieval_max_chunks", "retrieval_max_chars"},
-        "voice": {"voice_output_enabled", "tts_provider", "tts_allow_online", "tts_edge_voice", "tts_local_voice", "tts_online_fallback", "tts_rate", "tts_pitch", "tts_volume", "tts_tone", "tts_intensity", "tts_pause_style", "tts_expression_detail", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_max_chars", "tts_stop_previous", "tts_cpu_threads", "stt_provider", "stt_allow_browser_online", "stt_local_model", "stt_max_seconds"},
-        "reasoning": {"think_mode", "show_model_thinking"},
-        "specialists": {"selected_specialist_id"},
-        "appearance": {"ui_mode", "theme_preset", "ui_density", "ui_font_scale", "chat_font_scale", "reduce_motion", "window_width", "window_height", "custom_colors_enabled", "accent_color", "accent_secondary", "background_color", "panel_color", "user_bubble_color", "assistant_bubble_color", "muted_text_color", "background_image_enabled", "background_image_version", "background_image_opacity", "background_blur", "background_dim", "background_zoom", "background_fit", "gradients_enabled", "gradient_strength", "panel_opacity", "panel_blur", "glow_strength"},
-        "companion": {"companion_enabled", "companion_scale", "companion_dock", "companion_side_offset", "companion_bottom_offset", "companion_opacity", "companion_animation_speed", "companion_ambient_mode", "companion_click_reactions", "companion_state_reactions"},
-    }
+    section = str(section or "all").strip().lower()
+    if section != "all" and section not in RESET_SETTING_GROUPS:
+        raise ValueError(f"Unknown settings section: {section}")
     with _LOCK:
         if section == "all":
             next_settings = deepcopy(DEFAULT_SETTINGS)
         else:
             current = load_settings()
-            for key in groups.get(section, set()):
+            for key in RESET_SETTING_GROUPS[section]:
                 current[key] = deepcopy(DEFAULT_SETTINGS[key])
             next_settings = _coerce_settings(current)
         _persist_settings(next_settings)

@@ -9,7 +9,7 @@ Security fixes are maintained against the current CypraStudio release line. When
 Current documented build:
 
 ```text
-2.3.35-cyprapet-anchor-fix-20260918
+2.3.36-settings-reset-audit-20260918
 
 - OpenRouter direct-model catalog entries use current provider slugs; identity-preserving slug renames migrate safely, while retired free endpoints are never silently redirected to paid models.
 ```
@@ -47,6 +47,8 @@ CypraStudio currently uses the following protections:
 - Local microphone uploads are same-origin, file-signature checked, capped at 16 MB and 60 seconds per utterance, written only to a project-local temporary decode file, and deleted immediately after transcription.
 - Ending Live Call releases the in-process local STT model so it does not remain resident unnecessarily.
 - Persistent JSON state uses atomic-write behavior and keeps a last-known-good settings recovery copy.
+- Settings reset operations use a fixed server-side section registry; unknown reset sections are rejected rather than silently accepted. Reset Program State does not delete chats, Ollama model files, custom specialists, or the separately protected OpenRouter key.
+- Voice/all resets release active local TTS/STT runtime state so stale voice models are not left resident after factory settings are restored.
 - The frame-by-frame companion uses only packaged local PNG/CSS/JavaScript assets derived from the supplied reference sheet. Its added lively frames are prebuilt whole-character pixel frames; runtime motion does not synthesize, rotate, or interpolate separate body parts. Its new companion settings only persist bounded local presentation/playback values; the pet performs no model inference, network access, microphone access, or executable asset loading.
 
 These controls reduce risk; they do not turn the application, the operating system, third-party models, or optional network services into a formal security boundary.

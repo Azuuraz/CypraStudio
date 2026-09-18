@@ -2840,17 +2840,48 @@
   }
 
   async function resetSection(section) {
-    if (!confirm(section === 'all' ? 'Reset all MatrixStudio2.0 settings and remembered UI state? Chats and local models are kept.' : `Reset ${section} settings?`)) return;
-    const data = await api('/api/settings/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({section})});
-    state.settings = data.settings || {};
-    if (section === 'all') {
-      state.uiState = data.ui_state || {};
-      document.body.classList.remove('sidebar-collapsed','sidebar-open');
-      $('#chat-input').value = ''; autoSizeInput();
+    const labels = {runtime:'Runtime', chat:'Chat', voice:'Voice', reasoning:'Reasoning', appearance:'Appearance', companion:'Companion', specialists:'Specialist selection', all:'Program state'};
+    const label = labels[section] || section;
+    const prompt = section === 'all'
+      ? 'Reset all MatrixStudio2.0 settings and remembered UI state? Chats, local models, custom specialists, and your OpenRouter API key are kept.'
+      : `Reset ${label} settings to defaults?`;
+    if (!confirm(prompt)) return;
+    const controls = section === 'all'
+      ? [$('#reset-program-state')].filter(Boolean)
+      : $$(`.reset-section[data-section="${section}"]`);
+    controls.forEach(button => { button.disabled = true; });
+    if ($('#settings-status')) $('#settings-status').textContent = `Resetting ${label.toLowerCase()}…`;
+    try {
+      if (!(await flushSettingsAutosave())) throw new Error('Could not save pending settings before reset');
+      const data = await api('/api/settings/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({section})});
+      state.settings = data.settings || {};
+      if (section === 'voice' || section === 'all') stopSpeech({notifyBackend:false, release:true});
+      if (section === 'all') {
+        state.uiState = data.ui_state || {};
+        document.body.classList.remove('sidebar-collapsed','sidebar-open');
+        $('#chat-input').value = ''; autoSizeInput();
+      }
+      if (section === 'appearance') {
+        persistUiState({window_width:Number(state.settings.window_width || 1440), window_height:Number(state.settings.window_height || 900)}, 0);
+      }
+      if (section === 'specialists' || section === 'all') await loadSpecialistGroups({quiet:true});
+      applyAppearance();
+      await refreshRuntime();
+      fillSettingsForm();
+      renderChat();
+      $('#quick-think').value = state.settings.think_mode;
+      const message = section === 'all'
+        ? 'Program state reset to defaults · chats, models, custom specialists, and OpenRouter key kept'
+        : `${label} reset to defaults`;
+      if ($('#settings-status')) $('#settings-status').textContent = message;
+      showToast(message, {title:'Settings reset', tone:'success', duration:2600});
+    } catch (e) {
+      const message = `Reset failed · ${e.message || e}`;
+      if ($('#settings-status')) $('#settings-status').textContent = message;
+      showToast(message, {title:'Settings reset failed', tone:'danger', duration:4200});
+    } finally {
+      controls.forEach(button => { button.disabled = false; });
     }
-    if (section === 'appearance') persistUiState({window_width:Number(state.settings.window_width || 1440), window_height:Number(state.settings.window_height || 900)}, 0);
-    if (section === 'specialists' || section === 'all') await loadSpecialistGroups({quiet:true});
-    applyAppearance(); await refreshRuntime(); fillSettingsForm(); renderChat(); $('#quick-think').value = state.settings.think_mode;
   }
 
   async function startPull(modelOverride = '') {

@@ -22,7 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.35-cyprapet-anchor-fix-20260918`
+> Current build: `2.3.36-settings-reset-audit-20260918`
 
 OpenRouter UTF-8 stream fix: cloud SSE/JSON responses are explicitly decoded as UTF-8 so typographic punctuation and Unicode symbols do not become mojibake.
 
@@ -149,7 +149,10 @@ OpenRouter direct-model catalog entries were refreshed against the live provider
 - Atomic JSON writes for persistent state.
 - `settings.lastgood.json` recovery copy.
 - Fast settings autosave and save-on-control-change behavior.
-- **Reset Program State** preserves chats and local Ollama models.
+- Every visible Settings reset control is backed by the same authoritative reset-section registry, including Companion and Specialist selection.
+- Section resets preserve unrelated settings; Voice reset stops/releases active TTS and local STT state so factory voice defaults apply immediately.
+- **Reset Program State** restores factory settings plus remembered UI state while preserving chats, local Ollama models, custom specialists, and the OpenRouter API key.
+- Pending settings autosave is flushed before a reset so an older draft cannot immediately overwrite the reset result.
 - Release archives do not ship mutable user settings/state files.
 
 ### Maintenance

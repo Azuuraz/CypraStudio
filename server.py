@@ -29,6 +29,7 @@ from stt import LocalSTTService, STTUnavailable, audio_signature_valid
 from stt.service import MAX_AUDIO_BYTES, SUPPORTED_AUDIO_TYPES, normalize_model as normalize_stt_model
 from engine.storage import (
     DEFAULT_SETTINGS,
+    RESET_SETTING_GROUPS,
     delete_session,
     derive_title,
     export_workspace_bundle,
@@ -51,7 +52,7 @@ from engine.storage import (
 )
 
 ROOT = Path(__file__).resolve().parent
-BUILD_ID = "2.3.35-cyprapet-anchor-fix-20260918"
+BUILD_ID = "2.3.36-settings-reset-audit-20260918"
 APP_ID = "matrixstudio2-local"
 INSTANCE_ID = os.environ.get("MATRIXSTUDIO2_INSTANCE_ID", "matrixstudio2-dev")
 BACKGROUND_DIR = ROOT / "data" / "background"
@@ -523,12 +524,19 @@ async def settings_post(request: Request) -> dict[str, Any]:
 
 @app.post("/api/settings/reset")
 def settings_reset(body: ResetBody) -> dict[str, Any]:
-    if body.section not in {"all", "runtime", "chat", "voice", "reasoning", "specialists", "appearance"}:
+    section = str(body.section or "all").strip().lower()
+    if section != "all" and section not in RESET_SETTING_GROUPS:
         raise HTTPException(400, "Unknown settings section")
-    settings = reset_settings(body.section)
-    if body.section == "all":
+    try:
+        settings = reset_settings(section)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if section in {"voice", "all"}:
+        LOCAL_TTS.cancel(clear_queue=True, release=True)
+        LOCAL_STT.release()
+    if section == "all":
         reset_ui_state()
-    return {"settings": settings, "ui_state": load_ui_state()}
+    return {"settings": settings, "ui_state": load_ui_state(), "reset_section": section}
 
 
 @app.get("/api/appearance/background")
