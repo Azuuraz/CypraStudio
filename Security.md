@@ -9,7 +9,7 @@ Security fixes are maintained against the current CypraStudio release line. When
 Current documented build:
 
 ```text
-2.3.33-edge-expression-cues-20260918
+2.3.35-cyprapet-anchor-fix-20260918
 
 - OpenRouter direct-model catalog entries use current provider slugs; identity-preserving slug renames migrate safely, while retired free endpoints are never silently redirected to paid models.
 ```
@@ -127,3 +127,12 @@ When changing CypraStudio, preserve these defaults unless a deliberate design ch
 ## Disclosure
 
 Reasonable coordinated disclosure is encouraged. A useful report is one that gives enough information to reproduce and fix the defect without unnecessarily exposing users to a public exploit before a fix is available.
+
+
+## CypraPet v2 runtime assets
+Companion animation remains local-only. The new character frames are static transparent PNG assets served from the project package; no companion animation state, image, or interaction is sent to a network service.
+
+
+## Companion rendering integrity
+
+CypraPet runtime frames are normalized to a shared 384x220 anchor canvas. The renderer scales by height and preserves nearest-neighbor pixel output, preventing state-dependent resizing while keeping frame assets local-only.

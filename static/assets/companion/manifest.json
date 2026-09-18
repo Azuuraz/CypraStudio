@@ -1,16 +1,12 @@
 {
-  "version": 3,
+  "version": 5,
   "mode": "frame_by_frame",
-  "source": "user_reference_sheet_20260918",
-  "frame_size": [
-    320,
-    490
-  ],
+  "source": "cyprapet_v2_generated_reference_set_20260918",
   "render_size": [
-    128,
-    196
+    118,
+    145
   ],
-  "notes": "Whole-character pixel frames only. Additional lively frames are exact reference-preserving whole-frame pixel translations; no skeletal transforms, limb pivots, tweening, or body-part interpolation are used at runtime.",
+  "notes": "CypraPet v2 replacement companion. Whole-character transparent PNG frames are normalized onto one shared 384x220 anchor canvas so state changes keep a stable character scale and position. No articulated body-part rig, skeletal transforms, tweened limbs, or legacy pet art is used at runtime.",
   "animations": {
     "neutral": {
       "loop": true,
@@ -20,253 +16,193 @@
         "frames/idle_2.png",
         "frames/idle_3.png",
         "frames/idle_4.png",
-        "frames/idle_5.png",
-        "frames/idle_6.png",
-        "frames/idle_7.png"
+        "frames/idle_5.png"
       ],
       "durations_ms": [
-        720,
-        180,
-        180,
-        180,
-        180,
-        180,
-        180,
-        620
+        520,
+        160,
+        160,
+        160,
+        160,
+        520
       ]
     },
     "blink": {
       "loop": false,
       "frames": [
-        "frames/idle_0.png",
         "frames/blink_0.png",
         "frames/blink_1.png",
-        "frames/blink_0.png",
-        "frames/idle_0.png"
+        "frames/blink_2.png",
+        "frames/blink_3.png"
       ],
       "durations_ms": [
-        75,
-        95,
         80,
-        90,
+        70,
+        95,
         110
       ]
     },
     "thinking": {
       "loop": true,
-      "loop_start": 3,
+      "loop_start": 1,
       "frames": [
-        "frames/side_0.png",
-        "frames/side_1.png",
-        "frames/side_2.png",
-        "frames/side_3.png",
-        "frames/side_4.png",
-        "frames/side_5.png",
-        "frames/side_6.png"
+        "frames/think_0.png",
+        "frames/think_1.png",
+        "frames/think_2.png",
+        "frames/think_3.png",
+        "frames/think_4.png"
       ],
       "durations_ms": [
-        90,
         100,
-        110,
-        460,
-        460,
-        460,
-        560
+        160,
+        260,
+        240,
+        520
       ]
     },
     "curious": {
       "loop": false,
       "frames": [
-        "frames/side_0.png",
-        "frames/side_1.png",
-        "frames/side_2.png",
-        "frames/side_3.png",
-        "frames/side_4.png",
-        "frames/side_5.png",
-        "frames/side_6.png"
+        "frames/think_0.png",
+        "frames/think_1.png",
+        "frames/think_2.png",
+        "frames/think_3.png",
+        "frames/think_4.png"
       ],
       "durations_ms": [
+        160,
         180,
-        150,
-        150,
-        220,
         260,
-        300,
-        420
+        240,
+        600
       ]
     },
     "generating": {
       "loop": true,
       "frames": [
-        "frames/wink_0.png",
-        "frames/wink_1.png",
-        "frames/wink_2.png",
-        "frames/wink_3.png",
-        "frames/wink_4.png",
-        "frames/wink_5.png",
-        "frames/wink_6.png"
+        "frames/work_0.png",
+        "frames/work_1.png",
+        "frames/work_2.png",
+        "frames/work_3.png",
+        "frames/work_4.png"
       ],
       "durations_ms": [
-        210,
-        120,
-        110,
-        105,
-        110,
-        125,
-        300
+        280,
+        130,
+        130,
+        260,
+        220
       ]
     },
     "listening": {
       "loop": true,
       "frames": [
-        "frames/idle_0.png",
-        "frames/idle_1.png",
-        "frames/idle_2.png",
-        "frames/idle_3.png",
-        "frames/idle_4.png",
-        "frames/idle_5.png",
-        "frames/idle_6.png",
-        "frames/idle_7.png"
+        "frames/seat_0.png",
+        "frames/seat_1.png",
+        "frames/seat_2.png",
+        "frames/seat_3.png"
       ],
       "durations_ms": [
-        420,
-        170,
-        170,
-        170,
-        170,
-        170,
-        170,
-        420
+        500,
+        260,
+        260,
+        500
       ]
     },
     "speaking": {
       "loop": true,
       "frames": [
-        "frames/cheer_0.png",
-        "frames/cheer_1.png",
-        "frames/cheer_2.png",
-        "frames/cheer_3.png",
-        "frames/cheer_4.png",
-        "frames/cheer_5.png",
-        "frames/cheer_6.png"
+        "frames/speak_0.png",
+        "frames/speak_1.png",
+        "frames/speak_2.png",
+        "frames/speak_3.png",
+        "frames/speak_4.png",
+        "frames/speak_5.png"
       ],
       "durations_ms": [
         115,
-        100,
+        95,
         90,
-        85,
         90,
         100,
-        155
+        130
       ]
     },
     "happy": {
       "loop": true,
       "frames": [
-        "frames/cheer_0.png",
-        "frames/cheer_1.png",
-        "frames/cheer_2.png",
-        "frames/cheer_3.png",
-        "frames/cheer_4.png",
-        "frames/cheer_5.png",
-        "frames/cheer_6.png"
+        "frames/wave_0.png",
+        "frames/wave_1.png",
+        "frames/wave_2.png",
+        "frames/wave_3.png"
       ],
       "durations_ms": [
-        170,
-        135,
-        115,
-        105,
-        115,
-        135,
-        300
+        160,
+        130,
+        130,
+        280
       ]
     },
     "heart": {
       "loop": true,
       "frames": [
-        "frames/heart_0.png",
-        "frames/heart_1.png",
-        "frames/heart_2.png",
-        "frames/heart_3.png",
-        "frames/heart_4.png",
-        "frames/heart_5.png",
-        "frames/heart_6.png",
-        "frames/heart_7.png",
-        "frames/heart_8.png"
+        "frames/magic_0.png",
+        "frames/magic_1.png",
+        "frames/magic_2.png",
+        "frames/magic_3.png",
+        "frames/magic_4.png"
       ],
       "durations_ms": [
+        180,
+        180,
+        180,
         220,
-        160,
-        150,
-        150,
-        170,
-        150,
-        150,
-        160,
-        300
+        320
       ]
     },
     "wink": {
       "loop": false,
       "frames": [
-        "frames/wink_0.png",
-        "frames/wink_1.png",
-        "frames/wink_2.png",
-        "frames/wink_3.png",
-        "frames/wink_4.png",
-        "frames/wink_5.png",
-        "frames/wink_6.png"
+        "frames/wave_0.png",
+        "frames/wave_1.png",
+        "frames/wave_2.png",
+        "frames/wave_3.png"
       ],
       "durations_ms": [
-        190,
-        130,
-        110,
-        105,
-        115,
+        160,
         140,
-        430
+        140,
+        420
       ]
     },
     "error": {
       "loop": true,
       "frames": [
-        "frames/shy_0.png",
-        "frames/shy_1.png",
-        "frames/shy_2.png",
-        "frames/shy_3.png",
-        "frames/shy_4.png",
-        "frames/shy_5.png",
-        "frames/shy_6.png"
+        "frames/think_2.png",
+        "frames/think_3.png",
+        "frames/think_4.png"
       ],
       "durations_ms": [
-        340,
-        260,
-        240,
-        240,
-        240,
-        260,
-        420
+        300,
+        350,
+        350
       ]
     },
     "bashful": {
       "loop": false,
       "frames": [
-        "frames/shy_0.png",
-        "frames/shy_1.png",
-        "frames/shy_2.png",
-        "frames/shy_3.png",
-        "frames/shy_4.png",
-        "frames/shy_5.png",
-        "frames/shy_6.png"
+        "frames/magic_0.png",
+        "frames/magic_1.png",
+        "frames/magic_2.png",
+        "frames/magic_3.png",
+        "frames/magic_4.png"
       ],
       "durations_ms": [
-        240,
-        190,
+        200,
         180,
-        210,
+        180,
         220,
-        240,
-        420
+        600
       ]
     },
     "sleepy": {
@@ -276,18 +212,63 @@
         "frames/sleep_1.png",
         "frames/sleep_2.png",
         "frames/sleep_3.png",
-        "frames/sleep_4.png",
-        "frames/sleep_5.png",
-        "frames/sleep_6.png"
+        "frames/sleep_4.png"
       ],
       "durations_ms": [
-        680,
-        520,
-        500,
-        500,
-        560,
-        520,
-        760
+        550,
+        450,
+        700,
+        1200,
+        500
+      ]
+    },
+    "wave": {
+      "loop": false,
+      "frames": [
+        "frames/wave_0.png",
+        "frames/wave_1.png",
+        "frames/wave_2.png",
+        "frames/wave_3.png"
+      ],
+      "durations_ms": [
+        150,
+        130,
+        130,
+        450
+      ]
+    },
+    "magic": {
+      "loop": false,
+      "frames": [
+        "frames/magic_0.png",
+        "frames/magic_1.png",
+        "frames/magic_2.png",
+        "frames/magic_3.png",
+        "frames/magic_4.png"
+      ],
+      "durations_ms": [
+        170,
+        170,
+        170,
+        220,
+        650
+      ]
+    },
+    "dash": {
+      "loop": false,
+      "frames": [
+        "frames/dash_0.png",
+        "frames/dash_1.png",
+        "frames/dash_2.png",
+        "frames/dash_3.png",
+        "frames/dash_4.png"
+      ],
+      "durations_ms": [
+        90,
+        80,
+        80,
+        90,
+        500
       ]
     }
   },
@@ -301,8 +282,19 @@
       "wink",
       "curious",
       "happy",
+      "wave",
+      "magic",
+      "dash",
       "heart"
     ]
   },
-  "source_sha256": "7d27c34006e7afe07adb58cb30a0ad96b5219bfe3de7834e3a401308e0af2e6e"
+  "source_sha256": "f81dd662d756950ee303f880f9e2a88867ff98b3337e4289141942dfb9c222b3",
+  "frame_canvas": [
+    384,
+    220
+  ],
+  "anchor": {
+    "head_x": 192,
+    "ground_y": 212
+  }
 }

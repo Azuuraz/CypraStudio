@@ -22,7 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.33-edge-expression-cues-20260918`
+> Current build: `2.3.35-cyprapet-anchor-fix-20260918`
 
 OpenRouter UTF-8 stream fix: cloud SSE/JSON responses are explicitly decoded as UTF-8 so typographic punctuation and Unicode symbols do not become mojibake.
 
@@ -248,3 +248,10 @@ Edge TTS has its own explicit privacy gate. Do not enable it for text you do not
 ## License
 
 CypraStudio is released under the [MIT License](LICENSE).
+
+
+## CypraPet v2 companion
+
+All runtime frames are normalized onto one shared `384×220` anchor canvas and rendered by height, so standing, seated, work, magic, and dash states keep one stable character scale and position instead of shrinking or jumping between source-sheet crops.
+
+The previous companion artwork has been replaced by the approved CypraPet v2 frame-by-frame character set. Studio states now use dedicated neutral, blink, thinking, laptop/work, listening, speaking, wave, magic/heart, sleep, and dash sequences. The companion remains local-only, uses complete transparent PNG frames, preserves the existing Companion settings, and contains no articulated-body fallback or legacy pet frame assets.

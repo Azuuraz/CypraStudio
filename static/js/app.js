@@ -993,55 +993,53 @@
   const companionFrames = names => names.map(([file, ms]) => Object.freeze({src:COMPANION_FRAME_ROOT + file, ms}));
   const COMPANION_ANIMATIONS = Object.freeze({
     neutral: Object.freeze({loop:true, frames:companionFrames([
-      ['idle_0.png',720],['idle_1.png',180],['idle_2.png',180],['idle_3.png',180],
-      ['idle_4.png',180],['idle_5.png',180],['idle_6.png',180],['idle_7.png',620]
+      ['idle_0.png',520],['idle_1.png',160],['idle_2.png',160],['idle_3.png',160],
+      ['idle_4.png',160],['idle_5.png',520]
     ])}),
     blink: Object.freeze({loop:false, frames:companionFrames([
-      ['idle_0.png',75],['blink_0.png',95],['blink_1.png',80],['blink_0.png',90],['idle_0.png',110]
+      ['blink_0.png',80],['blink_1.png',70],['blink_2.png',95],['blink_3.png',110]
     ])}),
-    thinking: Object.freeze({loop:true, loopStart:3, frames:companionFrames([
-      ['side_0.png',90],['side_1.png',100],['side_2.png',110],
-      ['side_3.png',460],['side_4.png',460],['side_5.png',460],['side_6.png',560]
+    thinking: Object.freeze({loop:true, loopStart:1, frames:companionFrames([
+      ['think_0.png',100],['think_1.png',160],['think_2.png',260],['think_3.png',240],['think_4.png',520]
     ])}),
     curious: Object.freeze({loop:false, frames:companionFrames([
-      ['side_0.png',180],['side_1.png',150],['side_2.png',150],['side_3.png',220],
-      ['side_4.png',260],['side_5.png',300],['side_6.png',420]
+      ['think_0.png',160],['think_1.png',180],['think_2.png',260],['think_3.png',240],['think_4.png',600]
     ])}),
     generating: Object.freeze({loop:true, frames:companionFrames([
-      ['wink_0.png',210],['wink_1.png',120],['wink_2.png',110],['wink_3.png',105],
-      ['wink_4.png',110],['wink_5.png',125],['wink_6.png',300]
+      ['work_0.png',280],['work_1.png',130],['work_2.png',130],['work_3.png',260],['work_4.png',220]
     ])}),
     listening: Object.freeze({loop:true, frames:companionFrames([
-      ['idle_0.png',420],['idle_1.png',170],['idle_2.png',170],['idle_3.png',170],
-      ['idle_4.png',170],['idle_5.png',170],['idle_6.png',170],['idle_7.png',420]
+      ['seat_0.png',500],['seat_1.png',260],['seat_2.png',260],['seat_3.png',500]
     ])}),
     speaking: Object.freeze({loop:true, frames:companionFrames([
-      ['cheer_0.png',115],['cheer_1.png',100],['cheer_2.png',90],['cheer_3.png',85],
-      ['cheer_4.png',90],['cheer_5.png',100],['cheer_6.png',155]
+      ['speak_0.png',115],['speak_1.png',95],['speak_2.png',90],['speak_3.png',90],['speak_4.png',100],['speak_5.png',130]
     ])}),
     happy: Object.freeze({loop:true, frames:companionFrames([
-      ['cheer_0.png',170],['cheer_1.png',135],['cheer_2.png',115],['cheer_3.png',105],
-      ['cheer_4.png',115],['cheer_5.png',135],['cheer_6.png',300]
+      ['wave_0.png',160],['wave_1.png',130],['wave_2.png',130],['wave_3.png',280]
     ])}),
     heart: Object.freeze({loop:true, frames:companionFrames([
-      ['heart_0.png',220],['heart_1.png',160],['heart_2.png',150],['heart_3.png',150],
-      ['heart_4.png',170],['heart_5.png',150],['heart_6.png',150],['heart_7.png',160],['heart_8.png',300]
+      ['magic_0.png',180],['magic_1.png',180],['magic_2.png',180],['magic_3.png',220],['magic_4.png',320]
     ])}),
     wink: Object.freeze({loop:false, frames:companionFrames([
-      ['wink_0.png',190],['wink_1.png',130],['wink_2.png',110],['wink_3.png',105],
-      ['wink_4.png',115],['wink_5.png',140],['wink_6.png',430]
+      ['wave_0.png',160],['wave_1.png',140],['wave_2.png',140],['wave_3.png',420]
     ])}),
     error: Object.freeze({loop:true, frames:companionFrames([
-      ['shy_0.png',340],['shy_1.png',260],['shy_2.png',240],['shy_3.png',240],
-      ['shy_4.png',240],['shy_5.png',260],['shy_6.png',420]
+      ['think_2.png',300],['think_3.png',350],['think_4.png',350]
     ])}),
     bashful: Object.freeze({loop:false, frames:companionFrames([
-      ['shy_0.png',240],['shy_1.png',190],['shy_2.png',180],['shy_3.png',210],
-      ['shy_4.png',220],['shy_5.png',240],['shy_6.png',420]
+      ['magic_0.png',200],['magic_1.png',180],['magic_2.png',180],['magic_3.png',220],['magic_4.png',600]
     ])}),
     sleepy: Object.freeze({loop:true, frames:companionFrames([
-      ['sleep_0.png',680],['sleep_1.png',520],['sleep_2.png',500],['sleep_3.png',500],
-      ['sleep_4.png',560],['sleep_5.png',520],['sleep_6.png',760]
+      ['sleep_0.png',550],['sleep_1.png',450],['sleep_2.png',700],['sleep_3.png',1200],['sleep_4.png',500]
+    ])}),
+    wave: Object.freeze({loop:false, frames:companionFrames([
+      ['wave_0.png',150],['wave_1.png',130],['wave_2.png',130],['wave_3.png',450]
+    ])}),
+    magic: Object.freeze({loop:false, frames:companionFrames([
+      ['magic_0.png',170],['magic_1.png',170],['magic_2.png',170],['magic_3.png',220],['magic_4.png',650]
+    ])}),
+    dash: Object.freeze({loop:false, frames:companionFrames([
+      ['dash_0.png',90],['dash_1.png',80],['dash_2.png',80],['dash_3.png',90],['dash_4.png',500]
     ])})
   });
 
@@ -1049,7 +1047,7 @@
     const host = $('#studio-companion');
     if (!host) return;
     const scale = clamp(Number(s?.companion_scale ?? 1), .55, 1.60);
-    const compactBase = innerWidth <= 700 ? [96,147] : innerWidth <= 1040 ? [112,172] : [128,196];
+    const compactBase = innerWidth <= 700 ? [90,111] : innerWidth <= 1040 ? [104,128] : [118,145];
     host.style.setProperty('--companion-width', `${Math.round(compactBase[0] * scale)}px`);
     host.style.setProperty('--companion-height', `${Math.round(compactBase[1] * scale)}px`);
     host.style.setProperty('--companion-side-offset', `${Math.round(clamp(Number(s?.companion_side_offset ?? 6), 0, 160))}px`);
@@ -1140,11 +1138,10 @@
     state.companion.ambientTimer = setTimeout(() => {
       state.companion.ambientTimer = null;
       if (!state.companion.overrideMood && companionBaseMood() === 'neutral' && state.settings.companion_enabled !== false) {
-        const roll = Math.random();
-        if (roll < .42) companionPulse('wink', 1650);
-        else if (roll < .72) companionPulse('curious', 2100);
-        else if (roll < .94) companionPulse('happy', 1750);
-        else companionPulse('heart', 2200);
+        const choices = ['wink','wink','curious','happy','wave','magic','dash','heart'];
+        const next = choices[Math.floor(Math.random() * choices.length)];
+        const durations = {curious:2100, heart:2300, magic:2100, dash:1100, wave:1600};
+        companionPulse(next, durations[next] || 1700);
       }
       scheduleCompanionAmbient();
     }, delay);
@@ -1226,11 +1223,11 @@
 
   function companionReact() {
     if (state.settings.companion_click_reactions === false) return;
-    const choices = ['heart','wink','happy','curious','bashful'];
+    const choices = ['heart','wink','happy','curious','bashful','wave','magic','dash'];
     const current = state.companion.overrideMood;
     let next = choices[(choices.indexOf(current) + 1 + choices.length) % choices.length];
     if (!current) next = choices[Math.floor(Math.random() * choices.length)];
-    const duration = next === 'heart' ? 2100 : next === 'curious' ? 1900 : next === 'bashful' ? 1750 : 1550;
+    const duration = ({heart:2200, curious:1900, bashful:1900, wave:1600, magic:2100, dash:1100})[next] || 1550;
     companionPulse(next, duration);
   }
 

@@ -2225,12 +2225,12 @@ body.background-image-active .ambient-fx{opacity:.94}
   #live-call,#stop-voice-main{padding:0 8px;font-size:.54rem}
 }
 
-/* 2.3.26 configurable frame-by-frame studio companion ------------------------
-   Every visible motion is baked into complete 320x490 reference-derived PNG
-   frames. The runtime never rotates/scales individual body parts, so outfit,
-   silhouette, joints, hair, ears, and tail remain registration-locked. */
+/* 2.3.34 CypraPet v2 whole-character frames ---------------------------------
+   CypraPet v2 whole-character frames replace the previous companion artwork.
+   Every animation uses complete transparent PNG frames; no body-part rig,
+   skeletal transform, tweened limb, or legacy pet layer remains at runtime. */
 .studio-companion{
-  position:fixed;right:var(--companion-side-offset,6px);bottom:var(--companion-bottom-offset,0px);width:var(--companion-width,128px);height:var(--companion-height,196px);z-index:12;
+  position:fixed;right:var(--companion-side-offset,6px);bottom:var(--companion-bottom-offset,0px);width:var(--companion-width,118px);height:var(--companion-height,145px);z-index:12;
   pointer-events:none;user-select:none;-webkit-user-select:none;contain:layout style;
   filter:drop-shadow(0 9px 10px rgba(0,0,0,.32));
   opacity:var(--companion-opacity,1);transition:opacity var(--motion-fast) ease,filter var(--motion-fast) ease
@@ -2254,9 +2254,9 @@ body.background-image-active .ambient-fx{opacity:.94}
   position:absolute;inset:0;overflow:visible;pointer-events:none
 }
 .companion-frame{
-  display:block;width:100%;height:100%;object-fit:contain;object-position:center bottom;
+  display:block;position:absolute;left:50%;bottom:0;height:100%;width:auto;max-width:none;
   image-rendering:pixelated;image-rendering:crisp-edges;pointer-events:none;
-  transform:none!important;animation:none!important;transition:none!important
+  transform:translateX(-50%)!important;animation:none!important;transition:none!important
 }
 .studio-companion[data-mood="error"]{
   filter:drop-shadow(0 9px 10px rgba(0,0,0,.32)) drop-shadow(0 0 8px color-mix(in srgb,var(--danger) 20%,transparent))
@@ -2264,15 +2264,15 @@ body.background-image-active .ambient-fx{opacity:.94}
 .studio-companion[data-mood="speaking"]{
   filter:drop-shadow(0 9px 10px rgba(0,0,0,.32)) drop-shadow(0 0 7px color-mix(in srgb,var(--accent) 18%,transparent))
 }
-body.reduce-motion .studio-companion .companion-frame{animation:none!important;transform:none!important}
+body.reduce-motion .studio-companion .companion-frame{animation:none!important;transform:translateX(-50%)!important}
 .studio-companion[data-clickable="false"] .companion-click-target{cursor:default}
 .companion-control-grid output{font:700 .61rem ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent);margin-left:4px}
 
 @media(max-width:1040px){
-  .studio-companion{--companion-width:112px;--companion-height:172px;right:var(--companion-side-offset,4px);bottom:var(--companion-bottom-offset,0px)}
+  .studio-companion{--companion-width:104px;--companion-height:128px;right:var(--companion-side-offset,4px);bottom:var(--companion-bottom-offset,0px)}
 }
 @media(max-width:700px){
-  .studio-companion{--companion-width:96px;--companion-height:147px;right:var(--companion-side-offset,2px);bottom:var(--companion-bottom-offset,0px)}
+  .studio-companion{--companion-width:90px;--companion-height:111px;right:var(--companion-side-offset,2px);bottom:var(--companion-bottom-offset,0px)}
 }
 
 /* Custom Specialist Builder -------------------------------------------------
