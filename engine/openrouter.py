@@ -337,6 +337,10 @@ def stream_chat(
         stream=True,
         timeout=(10, 600),
     )
+    # OpenRouter streams JSON/SSE as UTF-8. Requests may otherwise infer
+    # ISO-8859-1 for text/event-stream responses that omit an explicit charset,
+    # which turns punctuation like ’ and — into mojibake such as â€™ / â€”.
+    response.encoding = "utf-8"
     if (
         not response.ok
         and _allow_free_fallback

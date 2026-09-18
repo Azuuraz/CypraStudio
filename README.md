@@ -22,7 +22,9 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.30-openrouter-catalogfix-20260918`
+> Current build: `2.3.32-openrouter-utf8-fix-20260918`
+
+OpenRouter UTF-8 stream fix: cloud SSE/JSON responses are explicitly decoded as UTF-8 so typographic punctuation and Unicode symbols do not become mojibake.
 
 OpenRouter direct-model catalog entries were refreshed against the live provider catalog: retired free endpoints were removed, renamed Inkling/Nemotron slugs were corrected with identity-preserving migration, and unavailable-model failures now explain that a new chat must use a current endpoint.
 
