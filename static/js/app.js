@@ -201,8 +201,25 @@
       volume: clamp(Number.isFinite(volume) ? volume : 1, .5, 1.5),
       tone: String($('#set-tts-tone')?.value || state.settings.tts_tone || 'neutral'),
       intensity: clamp(Number.isFinite(intensity) ? intensity : .7, 0, 1),
-      pause_style: String($('#set-tts-pause-style')?.value || state.settings.tts_pause_style || 'natural')
+      pause_style: String($('#set-tts-pause-style')?.value || state.settings.tts_pause_style || 'natural'),
+      expression_detail: String($('#set-tts-expression-detail')?.value || state.settings.tts_expression_detail || 'natural')
     };
+  }
+
+  function edgeNeedsSpeechPlan(text) {
+    const value = String(text || '');
+    return value.length > 1400 || /\[(?:pause\s*:\s*\d{1,5}|soft|excited|serious|slow|fast|emphasis|normal)\]/i.test(value);
+  }
+
+  function expressionForSpeechSegment(base, segment) {
+    const scale = (value, fallback=1) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
+    const next = {...base};
+    if (typeof segment?.tone === 'string' && segment.tone) next.tone = segment.tone;
+    next.rate = clamp(base.rate * scale(segment?.rate_scale), .5, 2);
+    next.pitch = clamp(base.pitch * scale(segment?.pitch_scale), .5, 2);
+    next.volume = clamp(base.volume * scale(segment?.volume_scale), .5, 1.5);
+    next.intensity = clamp(base.intensity * scale(segment?.intensity_scale), 0, 1);
+    return next;
   }
 
   function waitSpeechPause(ms, token) {
@@ -227,7 +244,8 @@
         body:JSON.stringify({
           text, voice_id:voiceId, provider:configured, replace:false, preview:!!preview,
           rate:expression.rate, pitch:expression.pitch, volume:expression.volume,
-          tone:expression.tone, intensity:expression.intensity
+          tone:expression.tone, intensity:expression.intensity,
+          pause_style:expression.pause_style, expression_detail:expression.expression_detail
         })
       });
       if (!response.ok) {
@@ -302,10 +320,11 @@
       const voiceId = configured === 'edge' ? (state.settings.tts_edge_voice || $('#set-tts-edge-voice')?.value || 'en-US-AvaNeural') : (state.settings.tts_local_voice || 'en_US-lessac-medium');
 
       if (configured === 'edge') {
-        // Fixed-tone short replies do not need a planning round trip. The
-        // expression controls still go directly to Edge, preserving emotion;
-        // auto tone and expressive pause shaping stay on the planner path.
-        const directEdge = clean.length <= 1400 && expression.tone !== 'auto' && expression.pause_style !== 'expressive';
+        // Ordinary short replies always go straight to synthesis. Auto tone,
+        // punctuation cadence, and expression detail are resolved locally on
+        // the synthesis path, avoiding an extra planning round trip. Only long
+        // text or explicit bracket cues needs the segment planner.
+        const directEdge = !edgeNeedsSpeechPlan(clean);
         if (directEdge) {
           if ($('#tts-status')) $('#tts-status').textContent = `Edge · ${expression.tone.toUpperCase()}`;
           const result = await requestServerSpeech(clean, {configured:'edge', voiceId, expression, token, preview, allowBrowserFallback:false});
@@ -316,7 +335,7 @@
         state.ttsAbort = new AbortController();
         const planResponse = await fetch('/api/tts/plan', {
           method:'POST', headers:{'Content-Type':'application/json'}, signal:state.ttsAbort.signal,
-          body:JSON.stringify({text:String(text || ''), tone:expression.tone, intensity:expression.intensity, pause_style:expression.pause_style})
+          body:JSON.stringify({text:String(text || ''), tone:expression.tone, intensity:expression.intensity, pause_style:expression.pause_style, expression_detail:expression.expression_detail})
         });
         state.ttsAbort = null;
         if (!planResponse.ok) {
@@ -328,13 +347,15 @@
         if (!Array.isArray(plan?.segments) || !plan.segments.length) throw new Error('Edge speech plan returned no speakable segments');
         expression.tone = String(plan.tone || expression.tone);
         expression.intensity = clamp(Number(plan.intensity ?? expression.intensity), 0, 1);
+        expression.expression_detail = String(plan.expression_detail || expression.expression_detail || 'natural');
         if ($('#tts-status')) $('#tts-status').textContent = `Edge · ${expression.tone.toUpperCase()} · ${plan.segments.length} segment${plan.segments.length === 1 ? '' : 's'}`;
         const speechSegments = plan.segments
           .map(segment => ({...segment, text:String(segment?.text || '').trim()}))
           .filter(segment => !!segment.text);
         if (!speechSegments.length) throw new Error('Edge speech plan returned no speakable segments');
 
-        let pendingSpeech = prefetchEdgeSegment(speechSegments[0].text, {voiceId, expression, preview});
+        let currentExpression = expressionForSpeechSegment(expression, speechSegments[0]);
+        let pendingSpeech = prefetchEdgeSegment(speechSegments[0].text, {voiceId, expression:currentExpression, preview});
         for (let index = 0; index < speechSegments.length; index += 1) {
           if (token !== state.ttsToken) return;
           const segment = speechSegments[index];
@@ -343,11 +364,16 @@
           const preparedSpeech = prefetched?.result;
           if (token !== state.ttsToken) return;
 
-          // Start synthesis of the next long-form chunk before current audio
-          // begins playing. This hides most Edge network/synthesis latency.
-          pendingSpeech = index + 1 < speechSegments.length
-            ? prefetchEdgeSegment(speechSegments[index + 1].text, {voiceId, expression, preview})
-            : null;
+          // Start synthesis of the next chunk before current audio begins. Cue
+          // overrides are local and bounded, so expressiveness does not add an
+          // extra model call and long-form latency stays hidden by prefetching.
+          if (index + 1 < speechSegments.length) {
+            const nextSegment = speechSegments[index + 1];
+            const nextExpression = expressionForSpeechSegment(expression, nextSegment);
+            pendingSpeech = prefetchEdgeSegment(nextSegment.text, {voiceId, expression:nextExpression, preview});
+          } else {
+            pendingSpeech = null;
+          }
 
           if (preparedSpeech?.browserFallback) await speakBrowser(segment.text, token);
           else await playVoiceBlob(preparedSpeech?.blob, token, 'Edge');
@@ -837,7 +863,7 @@
     if ($('#tts-edge-voice-field')) $('#tts-edge-voice-field').hidden = provider !== 'edge';
     if ($('#tts-local-voice-field')) $('#tts-local-voice-field').hidden = provider !== 'local';
     if ($('#tts-edge-fallback-field')) $('#tts-edge-fallback-field').hidden = provider !== 'edge';
-    for (const id of ['tts-edge-tone-field','tts-edge-intensity-field','tts-edge-pause-field']) { const el = $('#'+id); if (el) el.hidden = provider !== 'edge'; }
+    for (const id of ['tts-edge-tone-field','tts-edge-intensity-field','tts-edge-pause-field','tts-edge-detail-field']) { const el = $('#'+id); if (el) el.hidden = provider !== 'edge'; }
     const edgeSelect = $('#set-tts-edge-voice');
     const refresh = $('#refresh-edge-voices');
     if (edgeSelect) edgeSelect.disabled = provider !== 'edge' || !online || state.edgeVoicesLoading;
@@ -2576,7 +2602,7 @@
     $('#set-voice-output').checked = !!s.voice_output_enabled; $('#set-tts-provider').value = s.tts_provider || 'browser'; $('#set-tts-auto-speak').checked = !!s.tts_auto_speak; $('#set-tts-allow-online').checked = !!s.tts_allow_online;
     primeEdgeVoiceSelection(s.tts_edge_voice || 'en-US-AvaNeural'); $('#set-tts-local-voice').value = s.tts_local_voice || 'en_US-lessac-medium'; $('#set-tts-fallback').value = s.tts_online_fallback || 'browser';
     $('#set-tts-rate').value = s.tts_rate ?? 1; $('#tts-rate-output').value = Number(s.tts_rate ?? 1).toFixed(2); $('#set-tts-pitch').value = s.tts_pitch ?? 1; $('#tts-pitch-output').value = Number(s.tts_pitch ?? 1).toFixed(2);
-    $('#set-tts-volume').value = s.tts_volume ?? 1; $('#tts-volume-output').value = Number(s.tts_volume ?? 1).toFixed(2); $('#set-tts-tone').value = s.tts_tone || 'neutral'; $('#set-tts-intensity').value = s.tts_intensity ?? .7; $('#tts-intensity-output').value = `${Math.round(Number(s.tts_intensity ?? .7) * 100)}%`; $('#set-tts-pause-style').value = s.tts_pause_style || 'natural';
+    $('#set-tts-volume').value = s.tts_volume ?? 1; $('#tts-volume-output').value = Number(s.tts_volume ?? 1).toFixed(2); $('#set-tts-tone').value = s.tts_tone || 'neutral'; $('#set-tts-intensity').value = s.tts_intensity ?? .7; $('#tts-intensity-output').value = `${Math.round(Number(s.tts_intensity ?? .7) * 100)}%`; $('#set-tts-pause-style').value = s.tts_pause_style || 'natural'; $('#set-tts-expression-detail').value = s.tts_expression_detail || 'natural';
     $('#set-tts-max-chars').value = s.tts_max_chars ?? TTS_HARD_CEILING; $('#set-tts-cpu-threads').value = s.tts_cpu_threads ?? 2; $('#set-tts-skip-code').checked = s.tts_skip_code !== false; $('#set-tts-skip-urls').checked = s.tts_skip_urls !== false; $('#set-tts-stop-previous').checked = s.tts_stop_previous !== false;
     $('#set-stt-browser-fallback').checked = !!s.stt_allow_browser_online; $('#set-stt-local-model').value = s.stt_local_model || 'base.en';
     syncTTSProviderUI();
@@ -2627,7 +2653,7 @@
       auto_title_chats: $('#set-auto-title').checked, confirm_delete_chat: $('#set-confirm-delete').checked,
       voice_output_enabled: $('#set-voice-output').checked, tts_provider: $('#set-tts-provider').value, tts_auto_speak: $('#set-tts-auto-speak').checked, tts_allow_online: $('#set-tts-allow-online').checked,
       tts_edge_voice: $('#set-tts-edge-voice').value.trim(), tts_local_voice: $('#set-tts-local-voice').value.trim(), tts_online_fallback: $('#set-tts-fallback').value,
-      tts_rate: Number($('#set-tts-rate').value), tts_pitch: Number($('#set-tts-pitch').value), tts_volume: Number($('#set-tts-volume').value), tts_tone: $('#set-tts-tone').value, tts_intensity: Number($('#set-tts-intensity').value), tts_pause_style: $('#set-tts-pause-style').value, tts_max_chars: Number($('#set-tts-max-chars').value), tts_cpu_threads: Number($('#set-tts-cpu-threads').value),
+      tts_rate: Number($('#set-tts-rate').value), tts_pitch: Number($('#set-tts-pitch').value), tts_volume: Number($('#set-tts-volume').value), tts_tone: $('#set-tts-tone').value, tts_intensity: Number($('#set-tts-intensity').value), tts_pause_style: $('#set-tts-pause-style').value, tts_expression_detail: $('#set-tts-expression-detail').value, tts_max_chars: Number($('#set-tts-max-chars').value), tts_cpu_threads: Number($('#set-tts-cpu-threads').value),
       tts_skip_code: $('#set-tts-skip-code').checked, tts_skip_urls: $('#set-tts-skip-urls').checked, tts_stop_previous: $('#set-tts-stop-previous').checked,
       stt_provider: 'hybrid', stt_allow_browser_online: $('#set-stt-browser-fallback').checked, stt_local_model: $('#set-stt-local-model').value, stt_max_seconds: 60,
       retrieval_enabled: $('#set-retrieval-enabled').checked, retrieval_include_older_chat: $('#set-retrieval-chat').checked, retrieval_include_cross_chat: $('#set-retrieval-cross-chat').checked, retrieval_include_knowledge: $('#set-retrieval-knowledge').checked,

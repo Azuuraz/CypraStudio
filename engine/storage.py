@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from tts.policy import normalize_edge_voice, normalize_fallback, normalize_piper_voice, normalize_provider
-from tts.expression import normalize_pause_style, normalize_tone
+from tts.expression import normalize_expression_detail, normalize_pause_style, normalize_tone
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -21,7 +21,7 @@ UI_STATE_PATH = DATA / "ui_state.json"
 _LOCK = threading.RLock()
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "settings_schema": 17,
+    "settings_schema": 18,
     "port": 8765,
     "ollama_chat_model": "llama3.2:3b",
     "chat_provider": "local",
@@ -57,6 +57,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "tts_tone": "neutral",
     "tts_intensity": 0.7,
     "tts_pause_style": "natural",
+    "tts_expression_detail": "natural",
     "tts_auto_speak": False,
     "tts_skip_code": True,
     "tts_skip_urls": True,
@@ -230,6 +231,7 @@ def _coerce_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     out["tts_online_fallback"] = normalize_fallback(out.get("tts_online_fallback"))
     out["tts_tone"] = normalize_tone(out.get("tts_tone"))
     out["tts_pause_style"] = normalize_pause_style(out.get("tts_pause_style"))
+    out["tts_expression_detail"] = normalize_expression_detail(out.get("tts_expression_detail"))
     for key in ("tts_rate", "tts_pitch"):
         try:
             out[key] = max(0.5, min(2.0, float(out.get(key) or 1.0)))
@@ -321,7 +323,7 @@ def _coerce_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     out["system_prompt"] = prompt
     specialist = str(out.get("selected_specialist_id") or "").strip().lower()
     out["selected_specialist_id"] = "".join(ch for ch in specialist if ch.isalnum() or ch in "-_")[:120]
-    out["settings_schema"] = 17
+    out["settings_schema"] = 18
     return out
 
 
@@ -370,7 +372,7 @@ def reset_settings(section: str = "all") -> dict[str, Any]:
     groups = {
         "runtime": {"port", "ollama_chat_model", "chat_provider", "openrouter_allow_online", "openrouter_chat_model", "ollama_num_ctx", "ollama_keep_alive", "ollama_num_predict"},
         "chat": {"chat_temperature", "history_turns", "plain_chat", "show_generation_stats", "show_message_model", "auto_title_chats", "confirm_delete_chat", "system_prompt", "retrieval_enabled", "retrieval_include_knowledge", "retrieval_include_older_chat", "retrieval_include_cross_chat", "retrieval_max_chunks", "retrieval_max_chars"},
-        "voice": {"voice_output_enabled", "tts_provider", "tts_allow_online", "tts_edge_voice", "tts_local_voice", "tts_online_fallback", "tts_rate", "tts_pitch", "tts_volume", "tts_tone", "tts_intensity", "tts_pause_style", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_max_chars", "tts_stop_previous", "tts_cpu_threads", "stt_provider", "stt_allow_browser_online", "stt_local_model", "stt_max_seconds"},
+        "voice": {"voice_output_enabled", "tts_provider", "tts_allow_online", "tts_edge_voice", "tts_local_voice", "tts_online_fallback", "tts_rate", "tts_pitch", "tts_volume", "tts_tone", "tts_intensity", "tts_pause_style", "tts_expression_detail", "tts_auto_speak", "tts_skip_code", "tts_skip_urls", "tts_max_chars", "tts_stop_previous", "tts_cpu_threads", "stt_provider", "stt_allow_browser_online", "stt_local_model", "stt_max_seconds"},
         "reasoning": {"think_mode", "show_model_thinking"},
         "specialists": {"selected_specialist_id"},
         "appearance": {"ui_mode", "theme_preset", "ui_density", "ui_font_scale", "chat_font_scale", "reduce_motion", "window_width", "window_height", "custom_colors_enabled", "accent_color", "accent_secondary", "background_color", "panel_color", "user_bubble_color", "assistant_bubble_color", "muted_text_color", "background_image_enabled", "background_image_version", "background_image_opacity", "background_blur", "background_dim", "background_zoom", "background_fit", "gradients_enabled", "gradient_strength", "panel_opacity", "panel_blur", "glow_strength"},

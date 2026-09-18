@@ -22,7 +22,7 @@ Security is part of the runtime architecture rather than an optional mode. Cypra
   <img src="docs/mainchat.png" alt="CypraStudio main chat interface" width="100%">
 </p>
 
-> Current build: `2.3.32-openrouter-utf8-fix-20260918`
+> Current build: `2.3.33-edge-expression-cues-20260918`
 
 OpenRouter UTF-8 stream fix: cloud SSE/JSON responses are explicitly decoded as UTF-8 so typographic punctuation and Unicode symbols do not become mojibake.
 
@@ -104,8 +104,9 @@ OpenRouter direct-model catalog entries were refreshed against the live provider
 - Voice preview, stop/cancel, auto-speak, and per-response **SPEAK**.
 - Configurable rate, pitch, volume, maximum spoken characters, and Edge failure fallback. Full-response speech now defaults to a 50,000-character hard ceiling.
 - Edge expression presets: Neutral, Calm, Friendly, Cheerful, Serious, Sad, Angry, Dramatic, Narrator, and local deterministic Auto tone with stronger bounded prosody for clearer audible differences.
-- Adjustable tone intensity plus Off / Natural / Expressive pause styles. Normal punctuation stays in one fast Edge synthesis request; Expressive shapes punctuation for stronger delivery, while bounded `[pause:NNN]` markers provide explicit client-side gaps when exact pauses are needed.
-- Long Edge replies are split at sentence boundaries into roughly 3,200-character chunks. The next chunk is synthesized while the current audio is playing to reduce gaps without changing the fast one-request path for normal replies.
+- Adjustable tone intensity plus Off / Natural / Expressive pause styles and Subtle / Natural / Lively expression detail. Short ordinary replies—including Auto tone and expressive punctuation—stay on one direct Edge synthesis request with no planning round trip.
+- Deterministic local speech cues are supported without another AI call: `[soft]`, `[excited]`, `[serious]`, `[slow]`, `[fast]`, `[emphasis]`, `[normal]`, and bounded `[pause:NNN]` markers. Cue segments use bounded prosody overrides and are removed before speech so the markers are never spoken.
+- Long or explicitly cued Edge replies use a local loopback planner only when segmentation is actually needed. Remote chunks are kept around 1,200 characters (with a smaller first chunk) and the next chunk is synthesized while current audio is playing to hide most network/synthesis latency.
 - Optional skipping of URLs and code blocks.
 - Bounded synthesis queue and sanitization before online Edge synthesis.
 - **Live Call** reuses the active conversation for continuous microphone → STT → Ollama → TTS turns, so typed and spoken messages share the same context.

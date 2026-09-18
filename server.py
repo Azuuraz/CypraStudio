@@ -23,7 +23,7 @@ from engine.security import host_header_is_loopback, origin_matches_request, sec
 from tts import LocalTTSService
 from tts.service import TTSCancelled
 from tts.policy import normalize_edge_voice, normalize_fallback, normalize_piper_voice, normalize_provider
-from tts.expression import build_speech_plan, normalize_pause_style, normalize_tone, resolve_tone
+from tts.expression import build_speech_plan, normalize_expression_detail, normalize_pause_style, normalize_tone, resolve_tone
 from tts.sanitizer import sanitize_for_online_tts, sanitize_for_speech
 from stt import LocalSTTService, STTUnavailable, audio_signature_valid
 from stt.service import MAX_AUDIO_BYTES, SUPPORTED_AUDIO_TYPES, normalize_model as normalize_stt_model
@@ -51,7 +51,7 @@ from engine.storage import (
 )
 
 ROOT = Path(__file__).resolve().parent
-BUILD_ID = "2.3.32-openrouter-utf8-fix-20260918"
+BUILD_ID = "2.3.33-edge-expression-cues-20260918"
 APP_ID = "matrixstudio2-local"
 INSTANCE_ID = os.environ.get("MATRIXSTUDIO2_INSTANCE_ID", "matrixstudio2-dev")
 BACKGROUND_DIR = ROOT / "data" / "background"
@@ -360,6 +360,8 @@ class TTSRequest(BaseModel):
     volume: float | None = Field(default=None, ge=0.5, le=1.5)
     tone: str | None = Field(default=None, max_length=16)
     intensity: float | None = Field(default=None, ge=0.0, le=1.0)
+    pause_style: str | None = Field(default=None, max_length=16)
+    expression_detail: str | None = Field(default=None, max_length=16)
     replace: bool | None = None
     preview: bool = False
 
@@ -369,6 +371,7 @@ class TTSPlanRequest(BaseModel):
     tone: str | None = Field(default=None, max_length=16)
     intensity: float | None = Field(default=None, ge=0.0, le=1.0)
     pause_style: str | None = Field(default=None, max_length=16)
+    expression_detail: str | None = Field(default=None, max_length=16)
 
 
 class TTSStopRequest(BaseModel):
@@ -1002,6 +1005,7 @@ def tts_status() -> dict[str, Any]:
         "tone": normalize_tone(settings.get("tts_tone")),
         "intensity": float(settings.get("tts_intensity") if settings.get("tts_intensity") is not None else 0.7),
         "pause_style": normalize_pause_style(settings.get("tts_pause_style")),
+        "expression_detail": normalize_expression_detail(settings.get("tts_expression_detail")),
         "auto_speak": bool(settings.get("tts_auto_speak")),
         "local": local,
     }
@@ -1063,11 +1067,12 @@ def tts_edge_plan(body: TTSPlanRequest) -> dict[str, Any]:
     requested_tone = normalize_tone(body.tone if body.tone is not None else settings.get("tts_tone"))
     resolved = resolve_tone(requested_tone, safe)
     pause_style = normalize_pause_style(body.pause_style if body.pause_style is not None else settings.get("tts_pause_style"))
+    expression_detail = normalize_expression_detail(body.expression_detail if body.expression_detail is not None else settings.get("tts_expression_detail"))
     intensity = max(0.0, min(1.0, float(body.intensity if body.intensity is not None else settings.get("tts_intensity", 0.7))))
     # Keep Edge requests comfortably below its remote synthesis timeout. Large
     # dense segments can finish the first request but time out on later ones,
     # making long speech appear to stop mid-response.
-    segments = build_speech_plan(safe, style=pause_style, maximum_segments=48, maximum_chunk_chars=1200, first_chunk_chars=400)
+    segments = build_speech_plan(safe, style=pause_style, detail=expression_detail, maximum_segments=48, maximum_chunk_chars=1200, first_chunk_chars=400)
     if not segments:
         raise HTTPException(422, "Nothing speakable remains after speech planning")
     return {
@@ -1075,6 +1080,7 @@ def tts_edge_plan(body: TTSPlanRequest) -> dict[str, Any]:
         "tone": resolved,
         "intensity": intensity,
         "pause_style": pause_style,
+        "expression_detail": expression_detail,
         "segments": segments,
     }
 
@@ -1118,6 +1124,8 @@ def tts_synthesize(body: TTSRequest) -> Response:
             volume=float(body.volume if body.volume is not None else settings.get("tts_volume") or 1.0),
             tone=normalize_tone(body.tone if body.tone is not None else settings.get("tts_tone")),
             intensity=float(body.intensity if body.intensity is not None else settings.get("tts_intensity", 0.7)),
+            pause_style=normalize_pause_style(body.pause_style if body.pause_style is not None else settings.get("tts_pause_style")),
+            expression_detail=normalize_expression_detail(body.expression_detail if body.expression_detail is not None else settings.get("tts_expression_detail")),
             threads=int(settings.get("tts_cpu_threads") or 2),
             maximum=int(settings.get("tts_max_chars") or 50000),
             skip_code=bool(settings.get("tts_skip_code", True)),

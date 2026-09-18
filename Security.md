@@ -9,7 +9,7 @@ Security fixes are maintained against the current CypraStudio release line. When
 Current documented build:
 
 ```text
-2.3.32-openrouter-utf8-fix-20260918
+2.3.33-edge-expression-cues-20260918
 
 - OpenRouter direct-model catalog entries use current provider slugs; identity-preserving slug renames migrate safely, while retired free endpoints are never silently redirected to paid models.
 ```
@@ -40,7 +40,7 @@ CypraStudio currently uses the following protections:
 - Edge neural TTS is disabled unless the user explicitly enables online Edge TTS.
 - If the optional `edge-tts` dependency is missing, runtime preparation is exposed only through a same-origin POST action after that privacy gate is open; voice-catalog GET requests do not install packages.
 - Text is sanitized before optional Edge speech synthesis. Credential-shaped material, internal prompt/context markers, private paths, and configured code/URL content are excluded from online speech requests.
-- Spoken text is capped at a 50,000-character hard ceiling. Long Edge replies are split into bounded synthesis chunks instead of sending one oversized remote request.
+- Spoken text is capped at a 50,000-character hard ceiling. Normal short Edge speech uses one direct synthesis request; long or explicitly cued replies are segmented locally into bounded requests and prefetched during playback. Expression/cadence cues are deterministic local parsing only and do not add another model call.
 - Piper TTS is designed to run locally and CPU-only so voice output does not compete with the configured local model for GPU VRAM.
 - Live Call defaults to local STT using optional `faster-whisper` on CPU/int8 with model files stored under the project directory.
 - Browser STT fallback is disabled by default and requires a separate explicit privacy opt-in because microphone audio may be processed by a browser/OS speech service.

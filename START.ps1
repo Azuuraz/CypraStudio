@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 Set-Location -LiteralPath $Root
 
-$BuildId = "2.3.32-openrouter-utf8-fix-20260918"
+$BuildId = "2.3.33-edge-expression-cues-20260918"
 $AppId = "matrixstudio2-local"
 $BootCols = 76
 $BootRows = 18

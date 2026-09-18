@@ -344,7 +344,8 @@
               <label class="field" id="tts-edge-fallback-field" hidden><span>Edge failure fallback</span><select id="set-tts-fallback"><option value="browser">Device / browser voice</option><option value="piper">Piper local voice</option><option value="none">No fallback</option></select></label>
               <label class="field" id="tts-edge-tone-field" hidden><span>Edge tone</span><select id="set-tts-tone"><option value="neutral">Neutral</option><option value="calm">Calm</option><option value="friendly">Friendly</option><option value="cheerful">Cheerful</option><option value="serious">Serious</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="dramatic">Dramatic</option><option value="narrator">Narrator</option><option value="auto">Auto tone</option></select><small>Presets shape Edge rate, pitch and volume without unsupported SSML.</small></label>
               <label class="field" id="tts-edge-intensity-field" hidden><span>Tone intensity <output id="tts-intensity-output">70%</output></span><input id="set-tts-intensity" type="range" min="0" max="1" step="0.05"><small>Controls how strongly the selected Edge tone modifies your manual speech settings.</small></label>
-              <label class="field" id="tts-edge-pause-field" hidden><span>Pause style</span><select id="set-tts-pause-style"><option value="off">Off</option><option value="natural">Natural</option><option value="expressive">Expressive</option></select><small>Natural and Expressive insert real playback gaps. Manual markers such as [pause:700] are capped at 2000 ms.</small></label>
+              <label class="field" id="tts-edge-pause-field" hidden><span>Pause style</span><select id="set-tts-pause-style"><option value="off">Off</option><option value="natural">Natural</option><option value="expressive">Expressive</option></select><small>Uses punctuation cadence in the same Edge request. Explicit [pause:700] markers create real local gaps and are capped at 2000 ms.</small></label>
+              <label class="field" id="tts-edge-detail-field" hidden><span>Expression detail</span><select id="set-tts-expression-detail"><option value="subtle">Subtle</option><option value="natural">Natural</option><option value="lively">Lively</option></select><small>Controls deterministic local cadence/prosody strength. Supported cues: [soft], [excited], [serious], [slow], [fast], [emphasis], [normal]. No extra AI call.</small></label>
               <label class="field"><span>Speech rate <output id="tts-rate-output">1.00</output></span><input id="set-tts-rate" type="range" min="0.5" max="2" step="0.05"></label>
               <label class="field"><span>Speech pitch <output id="tts-pitch-output">1.00</output></span><input id="set-tts-pitch" type="range" min="0.5" max="2" step="0.05"><small>Applied directly to device speech and used as a bounded Edge prosody modifier.</small></label>
               <label class="field"><span>Speech volume <output id="tts-volume-output">1.00</output></span><input id="set-tts-volume" type="range" min="0.5" max="1.5" step="0.05"><small>Edge maps this to bounded volume prosody. Device speech uses values up to its native maximum.</small></label>
@@ -521,6 +522,6 @@
 
   <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
 
-  <script src="/static/js/app.js?v=openrouter-free-fallback-2331"></script>
+  <script src="/static/js/app.js?v=edge-expression-cues-2333"></script>
 </body>
 </html>

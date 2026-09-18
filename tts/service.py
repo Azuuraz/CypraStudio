@@ -20,7 +20,7 @@ import wave
 from .engines.piper_engine import PiperEngine
 from .engines.edge_engine import EdgeEngine, EdgeUnavailable
 from .sanitizer import sanitize_for_online_tts, sanitize_for_speech
-from .expression import resolve_edge_prosody
+from .expression import normalize_expression_detail, normalize_pause_style, resolve_edge_prosody, shape_edge_text
 
 
 log = logging.getLogger("cypra.tts")
@@ -46,6 +46,8 @@ class _SpeechRequest:
     volume: float
     tone: str
     intensity: float
+    pause_style: str
+    expression_detail: str
     threads: int
     generation: int
     provider: str
@@ -149,6 +151,8 @@ class LocalTTSService:
         volume: float = 1.0,
         tone: str = "neutral",
         intensity: float = 0.7,
+        pause_style: str = "natural",
+        expression_detail: str = "natural",
         threads: int = 2,
         maximum: int = 50000,
         skip_code: bool = True,
@@ -164,6 +168,8 @@ class LocalTTSService:
             volume=volume,
             tone=tone,
             intensity=intensity,
+            pause_style=pause_style,
+            expression_detail=expression_detail,
             threads=threads,
             maximum=maximum,
             skip_code=skip_code,
@@ -184,6 +190,8 @@ class LocalTTSService:
         volume: float = 1.0,
         tone: str = "neutral",
         intensity: float = 0.7,
+        pause_style: str = "natural",
+        expression_detail: str = "natural",
         threads: int = 2,
         maximum: int = 50000,
         skip_code: bool = True,
@@ -232,6 +240,8 @@ class LocalTTSService:
             volume=max(0.5, min(1.5, float(volume))),
             tone=str(tone or "neutral").strip().lower(),
             intensity=max(0.0, min(1.0, float(intensity))),
+            pause_style=normalize_pause_style(pause_style),
+            expression_detail=normalize_expression_detail(expression_detail),
             threads=max(1, min(4, int(threads))),
             generation=generation,
             provider=provider,
@@ -396,6 +406,7 @@ class LocalTTSService:
             if request.fallback == "piper":
                 return self._piper_synthesis(request, fallback=True)
             raise EdgeUnavailable("Online sanitizer failed; Edge request blocked") from exc
+        edge_text = shape_edge_text(edge_text, request.pause_style, request.expression_detail)
         if not edge_text:
             log.warning("[TTS] Edge request blocked: no safe speech remains")
             if request.fallback == "piper":
@@ -410,6 +421,7 @@ class LocalTTSService:
             pitch=request.pitch,
             volume=request.volume,
             text=edge_text,
+            detail=request.expression_detail,
         )
         loop = asyncio.new_event_loop()
         try:
